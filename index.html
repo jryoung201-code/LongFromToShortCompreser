@@ -157,6 +157,15 @@
   textarea:focus, input:focus{ outline: 2px solid var(--accent); outline-offset: 1px; }
   label.field-label{ display:block; font-size: 12px; color: var(--text-dim); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .06em; }
 
+  .gh-panel{
+    margin-top: 20px;
+    padding: 18px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .gh-panel input{ margin-top: 0; }
+
   button{
     font-family: var(--body);
     font-weight: 600;
@@ -323,9 +332,34 @@
         <a class="btn-primary dl" id="compressedDownload" download>Download compressed video</a>
       </div>
 
-      <label class="field-label">Hosted video link (optional)</label>
+      <div class="gh-panel">
+        <label class="field-label">Push the compressed file to GitHub (temporary)</label>
+        <p class="desc">Uploads directly from your browser to the GitHub API — nothing passes through any other server. The token stays only in this tab's memory. Use a token scoped to just this one repo, and revoke it once you're done. The file auto-deletes after 5 minutes on a timer (GitHub doesn't expose access logs, so this is time-based, not based on whether it was actually fetched).</p>
+
+        <input type="text" id="ghOwner" placeholder="GitHub username or org">
+        <input type="text" id="ghRepo" placeholder="Repo name (e.g. your-username.github.io)" style="margin-top:8px;">
+        <input type="text" id="ghBranch" placeholder="Branch (default: main)" style="margin-top:8px;">
+        <input type="password" id="ghToken" placeholder="Personal access token" style="margin-top:8px;">
+
+        <div class="btn-row">
+          <button class="btn-primary" id="ghUploadBtn" type="button" disabled>Upload compressed file to GitHub</button>
+        </div>
+
+        <div id="ghBanner"></div>
+
+        <div id="ghResult" style="display:none;">
+          <div class="video-meta" id="ghMeta"></div>
+          <div class="progress-label" style="margin-top:10px;"><span id="ghCountdownLabel">Auto-deletes in 5:00</span></div>
+          <div class="btn-row">
+            <button class="btn-ghost" id="ghKeepBtn" type="button">Keep this file (cancel auto-delete)</button>
+            <button class="btn-ghost" id="ghDeleteNowBtn" type="button">Delete now</button>
+          </div>
+        </div>
+      </div>
+
+      <label class="field-label">Hosted video link (optional, filled automatically after a GitHub upload)</label>
       <input type="text" id="videoLinkInput" placeholder="e.g. https://raw.githubusercontent.com/you/repo/main/clip.mp4">
-      <p class="desc" style="margin-top:8px;">Upload the (compressed) file to a GitHub repo — a raw file link (raw.githubusercontent.com) or GitHub Pages link both work — then paste it here. The generated prompt will mention this link. Not every model can actually fetch a file from a URL, so it's worth still attaching the file directly wherever that's an option.</p>
+      <p class="desc" style="margin-top:8px;">You can also paste a link here yourself if you host the video some other way. The generated prompt will mention this link. Not every model can actually fetch a file from a URL, so it's worth still attaching the file directly wherever that's an option.</p>
     </div>
   </section>
 
@@ -786,6 +820,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       dl.download = (state.file.name || 'video').replace(/\.[^.]+$/, '') + '_compressed.webm';
       el('compressResult').style.display = 'block';
       banner(cBanner, 'ok', 'Compressed. Note the output is .webm — if the target platform needs .mp4, you\'ll need to convert it separately.');
+      el('ghUploadBtn').disabled = false;
     }).catch(function(err){
       el('compressProgressWrap').style.display = 'none';
       el('compressBtn').disabled = false;
@@ -795,6 +830,166 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
 
   el('videoLinkInput').addEventListener('input', function(e){
     state.videoLink = e.target.value.trim();
+  });
+
+  // -----------------------------------------------------------------
+  // GitHub push (Contents API) + timed auto-delete
+  // -----------------------------------------------------------------
+  var gh = { sha: null, path: null, owner: null, repo: null, branch: null, token: null, timer: null, countdown: 0 };
+
+  function blobToBase64(blob){
+    return new Promise(function(resolve, reject){
+      var reader = new FileReader();
+      reader.onload = function(){ resolve(reader.result.split(',')[1]); };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function ghApi(path, opts, token){
+    return fetch('https://api.github.com' + path, Object.assign({
+      headers: Object.assign({
+        'Authorization': 'token ' + token,
+        'Accept': 'application/vnd.github+json'
+      }, (opts && opts.headers) || {})
+    }, opts)).then(function(res){
+      return res.json().then(function(body){
+        if (!res.ok){
+          var msg = (body && body.message) || (res.status + ' ' + res.statusText);
+          throw new Error(msg);
+        }
+        return body;
+      });
+    });
+  }
+
+  function formatCountdown(sec){
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m + ':' + String(s).padStart(2, '0');
+  }
+
+  function stopCountdown(){
+    if (gh.timer){ clearInterval(gh.timer); gh.timer = null; }
+  }
+
+  function startCountdown(){
+    gh.countdown = 300; // 5 minutes
+    el('ghCountdownLabel').textContent = 'Auto-deletes in ' + formatCountdown(gh.countdown);
+    stopCountdown();
+    gh.timer = setInterval(function(){
+      gh.countdown--;
+      if (gh.countdown <= 0){
+        stopCountdown();
+        el('ghCountdownLabel').textContent = 'Deleting…';
+        deleteGhFile().then(function(){
+          banner(el('ghBanner'), 'ok', 'The 5-minute timer ran out, so the temporary file was deleted from the repo.');
+          el('ghResult').style.display = 'none';
+        }).catch(function(err){
+          banner(el('ghBanner'), 'err', 'Timer expired but deletion failed: ' + err.message + '. You may need to remove it from the repo manually.');
+        });
+        return;
+      }
+      el('ghCountdownLabel').textContent = 'Auto-deletes in ' + formatCountdown(gh.countdown);
+    }, 1000);
+  }
+
+  function deleteGhFile(){
+    if (!gh.sha) return Promise.resolve();
+    return ghApi('/repos/' + gh.owner + '/' + gh.repo + '/contents/' + gh.path, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: 'Remove temporary video (auto-delete)',
+        sha: gh.sha,
+        branch: gh.branch
+      })
+    }, gh.token).then(function(){ gh.sha = null; });
+  }
+
+  el('ghUploadBtn').addEventListener('click', function(){
+    var gBanner = el('ghBanner');
+    clearBanner(gBanner);
+
+    if (!state.compressedBlob){
+      banner(gBanner, 'warn', 'Compress the video first — that\'s what gets uploaded.');
+      return;
+    }
+
+    var owner = el('ghOwner').value.trim();
+    var repo = el('ghRepo').value.trim();
+    var branch = el('ghBranch').value.trim() || 'main';
+    var token = el('ghToken').value.trim();
+
+    if (!owner || !repo || !token){
+      banner(gBanner, 'warn', 'Fill in the GitHub username, repo name, and a personal access token.');
+      return;
+    }
+
+    var blob = state.compressedBlob;
+    if (blob.size > 90 * 1024 * 1024){
+      banner(gBanner, 'warn', 'This file is ' + formatBytes(blob.size) + ' — GitHub\'s API tops out around 100MB per file. Try the 480p preset for a smaller file.');
+      return;
+    }
+
+    el('ghUploadBtn').disabled = true;
+    banner(gBanner, 'ok', 'Uploading…');
+
+    var filename = (state.file.name || 'video').replace(/\.[^.]+$/, '').replace(/[^a-z0-9-_]+/gi, '_');
+    var path = 'temp-videos/' + Date.now() + '-' + filename + '.webm';
+
+    blobToBase64(blob).then(function(base64){
+      return ghApi('/repos/' + owner + '/' + repo + '/contents/' + path, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'Add temporary video for AI prompt (auto-deletes in 5 min)',
+          content: base64,
+          branch: branch
+        })
+      }, token);
+    }).then(function(result){
+      gh.sha = result.content.sha;
+      gh.path = path;
+      gh.owner = owner;
+      gh.repo = repo;
+      gh.branch = branch;
+      gh.token = token;
+
+      var rawUrl = 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/' + branch + '/' + path;
+      var pagesUrl = (repo.toLowerCase() === (owner.toLowerCase() + '.github.io'))
+        ? 'https://' + owner + '.github.io/' + path
+        : 'https://' + owner + '.github.io/' + repo + '/' + path;
+
+      state.videoLink = rawUrl;
+      el('videoLinkInput').value = rawUrl;
+
+      el('ghMeta').innerHTML =
+        '<span><b>Raw link</b> ' + rawUrl + '</span>' +
+        '<span><b>Pages link</b> ' + pagesUrl + ' (may take a minute to build)</span>';
+      el('ghResult').style.display = 'block';
+      el('ghUploadBtn').disabled = false;
+      clearBanner(gBanner);
+      startCountdown();
+    }).catch(function(err){
+      el('ghUploadBtn').disabled = false;
+      banner(gBanner, 'err', 'Upload failed: ' + err.message);
+    });
+  });
+
+  el('ghKeepBtn').addEventListener('click', function(){
+    stopCountdown();
+    el('ghCountdownLabel').textContent = 'Kept — will not auto-delete. Remove it from the repo manually when you\'re done.';
+  });
+
+  el('ghDeleteNowBtn').addEventListener('click', function(){
+    stopCountdown();
+    banner(el('ghBanner'), 'ok', 'Deleting…');
+    deleteGhFile().then(function(){
+      banner(el('ghBanner'), 'ok', 'Deleted from the repo.');
+      el('ghResult').style.display = 'none';
+    }).catch(function(err){
+      banner(el('ghBanner'), 'err', 'Delete failed: ' + err.message);
+    });
   });
 
   // ---------------------------------------------------------------------
