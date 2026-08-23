@@ -334,12 +334,22 @@
 
       <div class="gh-panel">
         <label class="field-label">Push the compressed file to GitHub (temporary)</label>
-        <p class="desc">Uploads directly from your browser to the GitHub API — nothing passes through any other server. The token stays only in this tab's memory. Use a token scoped to just this one repo, and revoke it once you're done. The file auto-deletes after 5 minutes on a timer (GitHub doesn't expose access logs, so this is time-based, not based on whether it was actually fetched).</p>
+        <p class="desc">Uploads directly from your browser to the GitHub API — nothing passes through any other server. The token stays only in this tab's memory and is used solely for this upload call; it is never included in the generated prompt text, since that gets pasted into an AI chat and a write-capable token doesn't belong there. The file auto-deletes after 5 minutes on a timer (GitHub doesn't expose access logs, so this is time-based, not based on whether it was actually fetched).</p>
 
-        <input type="text" id="ghOwner" placeholder="GitHub username or org">
-        <input type="text" id="ghRepo" placeholder="Repo name (e.g. your-username.github.io)" style="margin-top:8px;">
-        <input type="text" id="ghBranch" placeholder="Branch (default: main)" style="margin-top:8px;">
-        <input type="password" id="ghToken" placeholder="Personal access token" style="margin-top:8px;">
+        <div id="ghRepoDetected" class="video-meta" style="display:none;"></div>
+        <div id="ghRepoManual" style="display:none;">
+          <input type="text" id="ghOwner" placeholder="GitHub username or org">
+          <input type="text" id="ghRepo" placeholder="Repo name (e.g. your-username.github.io)" style="margin-top:8px;">
+          <input type="text" id="ghBranch" placeholder="Branch (default: main)" style="margin-top:8px;">
+        </div>
+        <button class="btn-ghost" id="ghEditRepoBtn" type="button" style="margin-top:8px;">Not the right repo? Edit</button>
+
+        <label class="field-label">Personal access token</label>
+        <input type="password" id="ghToken" placeholder="Paste a token scoped to this repo's contents (read & write)">
+        <p class="desc" style="margin-top:6px;">
+          Don't have one handy? <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" style="color:var(--accent);">Create a fine-grained token on GitHub</a> —
+          scope it to <strong>this repository only</strong>, and under Permissions set <strong>Contents: Read and write</strong>. GitHub is the only place that can issue one; this page can't generate a working token for you.
+        </p>
 
         <div class="btn-row">
           <button class="btn-primary" id="ghUploadBtn" type="button" disabled>Upload compressed file to GitHub</button>
@@ -837,6 +847,46 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
   // -----------------------------------------------------------------
   var gh = { sha: null, path: null, owner: null, repo: null, branch: null, token: null, timer: null, countdown: 0 };
 
+  // Try to work out owner/repo from the URL this page is actually being served from
+  // (GitHub Pages serves user/org pages at owner.github.io/, project pages at owner.github.io/repo/).
+  function detectRepoFromLocation(){
+    var host = window.location.hostname;
+    if (!host.endsWith('.github.io')) return null;
+    var owner = host.slice(0, -('.github.io'.length));
+    var segments = window.location.pathname.split('/').filter(Boolean);
+    var repo, branch = 'main';
+    if (segments.length > 0){
+      repo = segments[0];
+    } else {
+      repo = owner + '.github.io'; // user/org root page repo
+    }
+    return { owner: owner, repo: repo, branch: branch };
+  }
+
+  var detected = detectRepoFromLocation();
+  if (detected){
+    gh.owner = detected.owner; gh.repo = detected.repo; gh.branch = detected.branch;
+    el('ghRepoDetected').style.display = 'flex';
+    el('ghRepoDetected').innerHTML =
+      '<span><b>Repo</b> ' + detected.owner + '/' + detected.repo + '</span>' +
+      '<span><b>Branch</b> ' + detected.branch + '</span>';
+  } else {
+    el('ghRepoManual').style.display = 'block';
+    banner(el('ghBanner'), 'warn', 'Couldn\'t detect a repo from this page\'s URL (it\'s not being served from a *.github.io address right now), so fill in the repo details manually below.');
+  }
+
+  el('ghEditRepoBtn').addEventListener('click', function(){
+    var manual = el('ghRepoManual');
+    var showing = manual.style.display === 'block';
+    manual.style.display = showing ? 'none' : 'block';
+    el('ghRepoDetected').style.display = showing ? 'flex' : 'none';
+    if (!showing){
+      el('ghOwner').value = gh.owner || '';
+      el('ghRepo').value = gh.repo || '';
+      el('ghBranch').value = gh.branch || 'main';
+    }
+  });
+
   function blobToBase64(blob){
     return new Promise(function(resolve, reject){
       var reader = new FileReader();
@@ -915,9 +965,10 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       return;
     }
 
-    var owner = el('ghOwner').value.trim();
-    var repo = el('ghRepo').value.trim();
-    var branch = el('ghBranch').value.trim() || 'main';
+    var manualShown = el('ghRepoManual').style.display === 'block';
+    var owner = manualShown ? el('ghOwner').value.trim() : gh.owner;
+    var repo = manualShown ? el('ghRepo').value.trim() : gh.repo;
+    var branch = (manualShown ? el('ghBranch').value.trim() : gh.branch) || 'main';
     var token = el('ghToken').value.trim();
 
     if (!owner || !repo || !token){
