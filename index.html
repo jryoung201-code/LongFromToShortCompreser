@@ -834,27 +834,32 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     });
   }
 
-  function splitChunk(file, start, end, index){
+  function splitChunks(file, ranges){
     return getFfmpeg().then(function(ffmpeg){
       var inName = 'split_input_' + Date.now();
-      var outName = 'split_' + index + '_' + Date.now() + '.mp4';
+      var timestamp = Date.now();
       return file.arrayBuffer().then(function(buf){
         return ffmpeg.writeFile(inName, new Uint8Array(buf));
       }).then(function(){
-        return ffmpeg.exec([
-          '-ss', String(start), '-i', inName,
-          '-t', String(end - start),
-          '-c', 'copy', '-avoid_negative_ts', 'make_zero', outName
-        ]);
-      }).then(function(){
-        return ffmpeg.readFile(outName);
-      }).then(function(data){
-        ffmpeg.deleteFile(inName).catch(function(){});
-        ffmpeg.deleteFile(outName).catch(function(){});
-        return new Blob([data.buffer], { type: 'video/mp4' });
+        return ranges.reduce(function(sequence, range, index){
+          return sequence.then(function(chunks){
+            var outName = 'split_' + (index + 1) + '_' + timestamp + '.mp4';
+            return ffmpeg.exec([
+              '-ss', String(range.start), '-i', inName,
+              '-t', String(range.end - range.start),
+              '-c', 'copy', '-avoid_negative_ts', 'make_zero', outName
+            ]).then(function(){
+              return ffmpeg.readFile(outName).then(function(data){
+                chunks.push({ blob: new Blob([data.buffer], { type: 'video/mp4' }), start: range.start, end: range.end });
+                return ffmpeg.deleteFile(outName).then(function(){ return chunks; });
+              });
+            });
+          });
+        }, Promise.resolve([]));
+      }).then(function(chunks){
+        return ffmpeg.deleteFile(inName).then(function(){ return chunks; });
       }).catch(function(err){
         ffmpeg.deleteFile(inName).catch(function(){});
-        ffmpeg.deleteFile(outName).catch(function(){});
         throw err;
       });
     });
@@ -892,21 +897,20 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     el('compressPct').textContent = '0%';
     var ranges = [{ start: 0, end: midpoint }, { start: midpoint, end: state.duration }];
     var bitrates = { 480: 3000000, 720: 6000000, 1080: 12000000 };
-    ranges.reduce(function(sequence, range, index){
-      return sequence.then(function(chunks){
-        banner(cBanner, 'ok', 'Splitting chunk ' + (index + 1) + ' of ' + ranges.length + ' without re-encoding…');
-        return splitChunk(state.file, range.start, range.end, index + 1).then(function(rawChunk){
-          el('compressPct').textContent = Math.round(((index + 0.25) / ranges.length) * 100) + '%';
+    splitChunks(state.file, ranges).then(function(rawChunks){
+      return rawChunks.reduce(function(sequence, rawChunk, index){
+        return sequence.then(function(chunks){
+          var range = ranges[index];
           banner(cBanner, 'ok', 'Compressing chunk ' + (index + 1) + ' of ' + ranges.length + '…');
-          return compressVideo(rawChunk, targetHeight, function(pct){
+          return compressVideo(rawChunk.blob, targetHeight, function(pct){
             el('compressPct').textContent = Math.round(((index + 0.25 + (pct * 0.75)) / ranges.length) * 100) + '%';
+          }).then(function(blob){
+            chunks.push({ blob: blob, start: range.start, end: range.end });
+            return chunks;
           });
-        }).then(function(blob){
-          chunks.push({ blob: blob, start: range.start, end: range.end });
-          return chunks;
         });
-      });
-    }, Promise.resolve([])).then(function(chunks){
+      }, Promise.resolve([]));
+    }).then(function(chunks){
       el('compressProgressWrap').style.display = 'none';
       el('splitBtn').disabled = false;
       el('compressBtn').disabled = false;
