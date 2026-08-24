@@ -3,7 +3,7 @@ import os
 import queue
 import shutil
 import subprocess
-import tempfile
+import sys
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -11,14 +11,19 @@ from tkinter import filedialog, messagebox, ttk
 
 SPLIT_LIMIT_BYTES = int(3.9 * 1024 * 1024 * 1024)
 HEIGHTS = {"480p": (480, 28), "720p": (720, 26), "1080p": (1080, 23)}
+DEFAULT_TEMPLATE = json.dumps([{
+    "start": "00:00:05", "end": "00:00:18", "title": "Short title",
+    "hook": "Scroll stopping hook", "captions": ["Caption line 1", "Caption line 2"],
+    "aspectRatio": "9:16", "effects": ["zoom-in"]
+}], indent=2)
 
 
 class ReelCutterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Reel Cutter - Local FFmpeg")
-        self.root.geometry("780x560")
-        self.root.minsize(680, 480)
+        self.root.geometry("860x920")
+        self.root.minsize(700, 650)
         self.events = queue.Queue()
         self.video_path = None
         self.busy = False
@@ -86,6 +91,28 @@ class ReelCutterApp:
         self.output_text = tk.Text(work_frame, height=8, state="disabled", wrap="word", background="#f5f5f5")
         self.output_text.grid(row=5, column=0, columnspan=2, sticky="nsew", pady=(12, 0))
 
+        ai_frame = ttk.LabelFrame(root_frame, text="AI editing plan and render", padding=14)
+        ai_frame.grid(row=5, column=0, sticky="nsew", pady=(16, 0))
+        ai_frame.columnconfigure(1, weight=1)
+        ai_frame.rowconfigure(3, weight=1)
+        ttk.Label(ai_frame, text="AI model").grid(row=0, column=0, sticky="w", padx=(0, 10))
+        self.model_var = tk.StringVar(value="ChatGPT")
+        ttk.Combobox(ai_frame, textvariable=self.model_var, values=["ChatGPT", "Claude", "Gemini", "Grok", "Other model"], state="readonly", width=18).grid(row=0, column=1, sticky="w")
+        ttk.Button(ai_frame, text="Generate prompt", command=self.generate_prompt).grid(row=0, column=2, padx=(10, 0))
+
+        ttk.Label(ai_frame, text="Editing-output JSON template").grid(row=1, column=0, columnspan=3, sticky="w", pady=(12, 4))
+        self.template_text = tk.Text(ai_frame, height=8, wrap="word")
+        self.template_text.grid(row=2, column=0, columnspan=3, sticky="ew")
+        self.template_text.insert("1.0", DEFAULT_TEMPLATE)
+
+        ttk.Label(ai_frame, text="Generated prompt").grid(row=3, column=0, columnspan=3, sticky="w", pady=(12, 4))
+        self.prompt_text = tk.Text(ai_frame, height=7, wrap="word")
+        self.prompt_text.grid(row=4, column=0, columnspan=3, sticky="ew")
+        ttk.Label(ai_frame, text="Paste the AI response containing <Code> JSON").grid(row=5, column=0, columnspan=3, sticky="w", pady=(12, 4))
+        self.response_text = tk.Text(ai_frame, height=7, wrap="word")
+        self.response_text.grid(row=6, column=0, columnspan=3, sticky="ew")
+        ttk.Button(ai_frame, text="Parse plan and render shorts", command=self.parse_and_render).grid(row=7, column=0, columnspan=3, sticky="w", pady=(10, 0))
+
         ttk.Label(
             root_frame,
             text="Everything runs on this computer. Files are never uploaded by this app.",
@@ -123,6 +150,73 @@ class ReelCutterApp:
             return
         self._set_busy(True)
         threading.Thread(target=self._split_worker, daemon=True).start()
+
+    def generate_prompt(self):
+        if not self._require_video():
+            return
+        try:
+            json.loads(self.template_text.get("1.0", "end"))
+        except json.JSONDecodeError as error:
+            messagebox.showerror("Invalid template", str(error))
+            return
+        prompt = (
+            f"Analyze the attached video '{self.video_path.name}' for TikTok, YouTube Shorts, and Instagram Reels.\n\n"
+            "First confirm the exact duration. Then identify strong moments with exact start/end timestamps, titles, hooks, captions, aspect ratios, and effects.\n\n"
+            "Return the final editing plan only as JSON inside <Code> tags, matching this template exactly:\n\n"
+            f"<Code>\n{self.template_text.get('1.0', 'end').strip()}\n</Code>"
+        )
+        self.prompt_text.delete("1.0", "end")
+        self.prompt_text.insert("1.0", prompt)
+
+    def parse_and_render(self):
+        if not self._require_video() or self.busy:
+            return
+        raw = self.response_text.get("1.0", "end").strip()
+        if "<Code>" in raw:
+            raw = raw.split("<Code>", 1)[1].split("</Code>", 1)[0]
+        raw = raw.replace("```json", "").replace("```", "").strip()
+        try:
+            clips = json.loads(raw)
+            if not isinstance(clips, list):
+                clips = [clips]
+            if not clips:
+                raise ValueError("The plan contains no clips.")
+            for clip in clips:
+                if self._timecode(clip["end"]) <= self._timecode(clip["start"]):
+                    raise ValueError("Every clip end must be after its start.")
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+            messagebox.showerror("Invalid editing plan", str(error))
+            return
+        self._set_busy(True)
+        threading.Thread(target=self._render_worker, args=(clips,), daemon=True).start()
+
+    def _render_worker(self, clips):
+        try:
+            outputs = []
+            for index, clip in enumerate(clips, 1):
+                start = self._timecode(clip["start"])
+                end = self._timecode(clip["end"])
+                output = self.video_path.with_name(f"{self.video_path.stem}_short_{index}.mp4")
+                self._event("status", f"Rendering short {index} of {len(clips)} with audio...")
+                self._run_ffmpeg([
+                    "-ss", str(start), "-i", str(self.video_path), "-t", str(end - start),
+                    "-vf", "scale=-2:1080", "-c:v", "libx264", "-preset", "veryfast",
+                    "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-y", str(output)
+                ], end - start, (index - 1) * (100 / len(clips)), 100 / len(clips))
+                outputs.append(output)
+            self._event("done", outputs)
+        except Exception as error:
+            self._event("error", str(error))
+
+    @staticmethod
+    def _timecode(value):
+        if isinstance(value, (int, float)):
+            return float(value)
+        parts = [float(part) for part in str(value).split(":")]
+        seconds = 0.0
+        for part in parts:
+            seconds = seconds * 60 + part
+        return seconds
 
     def _compress_worker(self):
         try:
@@ -225,10 +319,15 @@ class ReelCutterApp:
         binary = shutil.which(name)
         if binary:
             return binary
-        bundled = Path(__file__).resolve().parent / "bin" / (name + (".exe" if os.name == "nt" else ""))
-        if bundled.exists():
-            return str(bundled)
-        raise RuntimeError(f"Could not find {name}. Install FFmpeg and add it to PATH, or place it in desktop_app/bin/.")
+        binary_name = name + (".exe" if os.name == "nt" else "")
+        search_dirs = [Path(__file__).resolve().parent / "bin"]
+        if getattr(sys, "frozen", False):
+            search_dirs.insert(0, Path(sys._MEIPASS) / "bin")
+        for directory in search_dirs:
+            bundled = directory / binary_name
+            if bundled.exists():
+                return str(bundled)
+        raise RuntimeError(f"Could not find {name}. The app needs bundled FFmpeg or an FFmpeg installation on PATH.")
 
     def _require_video(self):
         if not self.video_path:

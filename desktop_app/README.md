@@ -1,10 +1,10 @@
 # Reel Cutter Desktop App
 
-This is the native desktop version of Reel Cutter. It uses Python and the system FFmpeg executable, so video files stay on the user's computer.
+This is the native desktop version of Reel Cutter. It uses Python and native FFmpeg, so video files stay on the user's computer.
 
 ## Run locally
 
-Install FFmpeg and make sure both `ffmpeg` and `ffprobe` are on PATH. Then run:
+The downloadable Windows EXE includes `ffmpeg.exe` and `ffprobe.exe`. For running the Python source directly, install FFmpeg and make sure both `ffmpeg` and `ffprobe` are on PATH. Then run:
 
 ```bash
 python desktop_app/app.py
@@ -20,4 +20,4 @@ On Windows, run:
 desktop_app\build_windows.bat
 ```
 
-This creates `dist\ReelCutter.exe`. The target computer must have FFmpeg installed and available on PATH, unless `ffmpeg.exe` and `ffprobe.exe` are placed in `desktop_app\bin\` before building.
+This creates `dist\ReelCutter.exe` with FFmpeg bundled by the GitHub Actions build. The target computer does not need a separate FFmpeg installation.
