@@ -317,6 +317,7 @@
           <option value="1080">1080p — higher quality</option>
         </select>
         <button class="btn-primary" id="compressBtn" type="button" disabled>Compress video</button>
+        <button class="btn-ghost" id="splitBtn" type="button" disabled>Split into 2 chunks</button>
       </div>
 
       <div id="compressProgressWrap" style="display:none;">
@@ -330,6 +331,11 @@
         <video id="compressedPreview" controls></video>
         <div class="video-meta" id="compressedMeta"></div>
         <a class="btn-primary dl" id="compressedDownload" download>Download compressed video</a>
+      </div>
+
+      <div id="chunkResult" style="display:none;">
+        <div class="video-meta" id="chunkMeta"></div>
+        <div class="results-grid" id="chunkList"></div>
       </div>
 
       <div class="gh-panel">
@@ -709,6 +715,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       el('renderBtn').disabled = !state.parsedClips;
       el('compressBtn').disabled = false;
       el('compressPreset').disabled = false;
+      el('splitBtn').disabled = false;
     };
     state.videoEl.onerror = function(){
       banner(uploadBanner, 'err', 'Could not decode this video in your browser. Try converting it to MP4 (H.264 + AAC) and re-uploading.');
@@ -826,6 +833,114 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       });
     });
   }
+
+  function recordChunk(sourceVideo, start, end, targetHeight, onProgress){
+    return new Promise(function(resolve, reject){
+      if (!window.MediaRecorder || !sourceVideo.captureStream || !window.MediaStream){
+        reject(new Error('This browser cannot create local video chunks. Try a recent Chrome, Edge, or Firefox.'));
+        return;
+      }
+      var canvas = document.createElement('canvas');
+      var ctx = canvas.getContext('2d');
+      var scale = Math.min(1, targetHeight / sourceVideo.videoHeight);
+      canvas.width = Math.max(2, Math.round(sourceVideo.videoWidth * scale / 2) * 2);
+      canvas.height = Math.max(2, Math.round(sourceVideo.videoHeight * scale / 2) * 2);
+      var stream = canvas.captureStream(30);
+      sourceVideo.captureStream().getAudioTracks().forEach(function(track){ stream.addTrack(track); });
+      var mime = 'video/webm;codecs=vp9,opus';
+      if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
+      var recorder;
+      try { recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6000000 }); }
+      catch (err){ reject(err); return; }
+      var chunks = [];
+      var finished = false;
+      function cleanup(){
+        stream.getTracks().forEach(function(track){ track.stop(); });
+        sourceVideo.pause();
+        sourceVideo.muted = false;
+      }
+      function finish(){
+        if (finished) return;
+        finished = true;
+        if (recorder.state !== 'inactive') recorder.stop();
+      }
+      recorder.ondataavailable = function(e){ if (e.data.size) chunks.push(e.data); };
+      recorder.onstop = function(){ cleanup(); resolve(new Blob(chunks, { type: recorder.mimeType || mime })); };
+      recorder.onerror = function(e){ cleanup(); reject(e.error || new Error('Chunk recording failed.')); };
+      sourceVideo.currentTime = start;
+      sourceVideo.muted = true;
+      sourceVideo.onseeked = function(){
+        sourceVideo.onseeked = null;
+        recorder.start();
+        sourceVideo.play().then(function(){
+          function draw(){
+            if (sourceVideo.currentTime >= end || sourceVideo.ended){ finish(); return; }
+            if (sourceVideo.readyState >= 2) ctx.drawImage(sourceVideo, 0, 0, canvas.width, canvas.height);
+            onProgress(Math.max(0, Math.min(1, (sourceVideo.currentTime - start) / (end - start))));
+            requestAnimationFrame(draw);
+          }
+          draw();
+        }).catch(function(err){ finish(); cleanup(); reject(err); });
+      };
+    });
+  }
+
+  function renderChunkCards(chunks){
+    var list = el('chunkList');
+    list.innerHTML = '';
+    chunks.forEach(function(chunk, index){
+      var url = URL.createObjectURL(chunk.blob);
+      var card = document.createElement('div');
+      card.className = 'short-card';
+      card.innerHTML = '<div class="meta"><div class="title">Chunk ' + (index + 1) + '</div>' +
+        '<div class="time">' + formatDuration(chunk.start) + ' – ' + formatDuration(chunk.end) + ' · ' + formatBytes(chunk.blob.size) + '</div></div>' +
+        '<a class="btn-primary dl" download="chunk_' + (index + 1) + '.webm" href="' + url + '">Download chunk</a>' +
+        '<button class="btn-ghost dl chunk-use" type="button">Use this chunk for upload</button>';
+      card.querySelector('.chunk-use').addEventListener('click', function(){
+        state.compressedBlob = chunk.blob;
+        el('b44UploadBtn').disabled = false;
+        banner(el('compressBanner'), 'ok', 'Chunk ' + (index + 1) + ' selected for upload.');
+      });
+      list.appendChild(card);
+    });
+  }
+
+  el('splitBtn').addEventListener('click', function(){
+    var cBanner = el('compressBanner');
+    if (!state.file || !state.duration){ banner(cBanner, 'warn', 'Upload a video first.'); return; }
+    var midpoint = state.duration / 2;
+    var targetHeight = parseInt(el('compressPreset').value, 10);
+    el('splitBtn').disabled = true;
+    el('compressBtn').disabled = true;
+    el('compressProgressWrap').style.display = 'block';
+    el('compressLabel').textContent = 'Splitting locally into WebM chunks…';
+    el('compressPct').textContent = '0%';
+    var ranges = [{ start: 0, end: midpoint }, { start: midpoint, end: state.duration }];
+    ranges.reduce(function(sequence, range, index){
+      return sequence.then(function(chunks){
+        return recordChunk(state.videoEl, range.start, range.end, targetHeight, function(pct){
+          el('compressPct').textContent = Math.round(((index + pct) / ranges.length) * 100) + '%';
+        }).then(function(blob){
+          chunks.push({ blob: blob, start: range.start, end: range.end });
+          return chunks;
+        });
+      });
+    }, Promise.resolve([])).then(function(chunks){
+      el('compressProgressWrap').style.display = 'none';
+      el('splitBtn').disabled = false;
+      el('compressBtn').disabled = false;
+      el('chunkMeta').textContent = 'Created 2 valid local WebM chunks before upload.';
+      el('chunkResult').style.display = 'block';
+      state.chunks = chunks;
+      renderChunkCards(chunks);
+      banner(cBanner, 'ok', 'Split locally into 2 WebM chunks. Choose a chunk to upload.');
+    }).catch(function(err){
+      el('compressProgressWrap').style.display = 'none';
+      el('splitBtn').disabled = false;
+      el('compressBtn').disabled = false;
+      banner(cBanner, 'err', 'Chunk splitting failed: ' + errText(err));
+    });
+  });
 
   function renderCompressRuler(pct){
     var ruler = el('compressRuler');
@@ -979,7 +1094,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     el('b44UploadBtn').disabled = true;
     banner(bBanner, 'ok', 'Uploading…');
 
-    var filename = (state.file.name || 'video').replace(/\.[^.]+$/, '').replace(/[^a-z0-9-_]+/gi, '_') + '.mp4';
+    var filename = (state.file.name || 'video').replace(/\.[^.]+$/, '').replace(/[^a-z0-9-_]+/gi, '_') + (blob.type.indexOf('webm') !== -1 ? '.webm' : '.mp4');
 
     b44Upload(endpoint, apiKey, blob, filename).then(function(result){
       el('b44UploadBtn').disabled = false;
