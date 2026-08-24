@@ -404,9 +404,31 @@ class ReelCutterApp:
 
 
 def main():
-    root = tk.Tk()
-    ReelCutterApp(root)
-    root.mainloop()
+    try:
+        import webview
+    except ImportError as error:
+        raise SystemExit("The desktop app requires pywebview. Rebuild it with the provided Windows build workflow.") from error
+
+    if getattr(sys, "frozen", False):
+        project_root = Path(sys._MEIPASS)
+    else:
+        project_root = Path(__file__).resolve().parents[1]
+    html_path = project_root / "index.html"
+    if not html_path.exists():
+        raise SystemExit(f"Could not find the bundled website UI at {html_path}.")
+
+    html = html_path.read_text(encoding="utf-8")
+    html = html.replace(
+        '<p><a class="btn-primary" href="https://github.com/jryoung201-code/LongFromToShortCompreser/releases/latest/download/ReelCutter.exe">Download the Windows app</a></p>',
+        "",
+    )
+    html = html.replace(
+        '<p class="desc"><strong>Browser limit: 3.5 GB per video.</strong> To work with files larger than 3.5 GB, install the full Reel Cutter app.</p>',
+        "",
+    )
+    html = html.replace("<head>", f'<head><base href="{html_path.parent.as_uri()}/">', 1)
+    webview.create_window("Reel Cutter", html=html, width=1120, height=900, min_size=(760, 600))
+    webview.start()
 
 
 if __name__ == "__main__":
