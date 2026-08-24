@@ -1229,14 +1229,15 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       var audioSource = null;
       var audioDestination = null;
       var sourceStream = (sourceVideo.captureStream || sourceVideo.mozCaptureStream);
-      if (sourceStream && window.AudioContext){
-        audioContext = new AudioContext();
-        var capturedAudio = sourceStream.call(sourceVideo);
-        if (capturedAudio.getAudioTracks().length){
+      var capturedStream = sourceStream ? sourceStream.call(sourceVideo) : null;
+      if (capturedStream && capturedStream.getAudioTracks().length){
+        capturedStream.getAudioTracks().forEach(function(track){ stream.addTrack(track); });
+        if (window.AudioContext){
+          audioContext = new AudioContext();
+          var capturedAudio = new MediaStream(capturedStream.getAudioTracks());
           audioSource = audioContext.createMediaStreamSource(capturedAudio);
           audioDestination = audioContext.createMediaStreamDestination();
           audioSource.connect(audioDestination);
-          audioDestination.stream.getAudioTracks().forEach(function(track){ stream.addTrack(track); });
           if (state.playAudio) audioSource.connect(audioContext.destination);
         }
       }
@@ -1393,7 +1394,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     renderVideo.crossOrigin = 'anonymous';
     renderVideo.playsInline = true;
     renderVideo.muted = false;
-    renderVideo.volume = 0;
+    renderVideo.volume = state.playAudio ? 1 : 0;
     renderVideo.style.display = 'none';
     document.body.appendChild(renderVideo);
 
