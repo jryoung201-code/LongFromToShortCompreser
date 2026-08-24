@@ -738,30 +738,6 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     return mime && mime.indexOf('video/mp4') === 0 ? 'mp4' : 'webm';
   }
 
-  var SERVER_COMPRESS_URL = 'https://longfromtoshortcompreser.onrender.com/compress';
-
-  function compressOnServer(file, targetHeight, onStatus){
-    var form = new FormData();
-    form.append('video', file, file.name);
-    form.append('height', String(targetHeight));
-    onStatus('Uploading to the compression server…');
-    return fetch(SERVER_COMPRESS_URL, { method: 'POST', body: form }).then(function(res){
-      if (!res.ok){
-        return res.text().then(function(text){
-          var details;
-          try { details = JSON.parse(text); } catch (e) { details = null; }
-          throw new Error((details && details.error) || ('Server compression failed (' + res.status + ').'));
-        });
-      }
-      onStatus('Downloading compressed MP4…');
-      return res.blob();
-    });
-  }
-
-  function isConnectionError(err){
-    return err && (err.name === 'TypeError' || /failed to fetch|network|load/i.test(err.message || ''));
-  }
-
   function compressVideo(sourceVideo, targetHeight, bitrate, onProgress){
     return new Promise(function(resolve, reject){
       var canvas = document.createElement('canvas');
@@ -771,25 +747,32 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
         return;
       }
       var scale = targetHeight / sourceVideo.videoHeight;
-      canvas.width = Math.round(sourceVideo.videoWidth * scale);
+      canvas.width = Math.max(2, Math.round(sourceVideo.videoWidth * scale / 2) * 2);
       canvas.height = targetHeight;
       var stream = canvas.captureStream(30);
-      var sourceStream = (sourceVideo.captureStream || sourceVideo.mozCaptureStream);
+      var sourceStream = sourceVideo.captureStream || sourceVideo.mozCaptureStream;
       if (sourceStream){
         sourceStream.call(sourceVideo).getAudioTracks().forEach(function(track){ stream.addTrack(track); });
       }
       var mime = pickMimeType();
       if (!mime){
         stream.getTracks().forEach(function(track){ track.stop(); });
-        reject(new Error('This browser does not support local video compression. Try a recent Chrome, Edge, or Firefox.'));
+        reject(new Error('This browser does not support local video compression.'));
         return;
       }
       var recorder;
       try { recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate }); }
-      catch (err){ reject(err); return; }
+      catch (err){
+        stream.getTracks().forEach(function(track){ track.stop(); });
+        reject(err);
+        return;
+      }
       var chunks = [];
       var settled = false;
-      function cleanup(){ stream.getTracks().forEach(function(track){ track.stop(); }); sourceVideo.muted = false; }
+      function cleanup(){
+        stream.getTracks().forEach(function(track){ track.stop(); });
+        sourceVideo.muted = false;
+      }
       recorder.ondataavailable = function(e){ if (e.data.size) chunks.push(e.data); };
       recorder.onstop = function(){
         if (settled) return;
@@ -797,7 +780,12 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
         cleanup();
         resolve(new Blob(chunks, { type: recorder.mimeType || mime }));
       };
-      recorder.onerror = function(e){ if (settled) return; settled = true; cleanup(); reject(e.error || new Error('Stream compression failed.')); };
+      recorder.onerror = function(e){
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(e.error || new Error('Local compression failed.'));
+      };
       sourceVideo.currentTime = 0;
       sourceVideo.muted = true;
       sourceVideo.onseeked = function(){
@@ -805,13 +793,19 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
         recorder.start();
         sourceVideo.play().then(function(){
           function draw(){
-            if (sourceVideo.paused || sourceVideo.ended){ if (recorder.state !== 'inactive') recorder.stop(); return; }
+            if (sourceVideo.paused || sourceVideo.ended){
+              if (recorder.state !== 'inactive') recorder.stop();
+              return;
+            }
             if (sourceVideo.readyState >= 2) ctx.drawImage(sourceVideo, 0, 0, canvas.width, canvas.height);
             onProgress(sourceVideo.duration ? sourceVideo.currentTime / sourceVideo.duration : 0);
             requestAnimationFrame(draw);
           }
           draw();
-        }).catch(function(err){ if (recorder.state !== 'inactive') recorder.stop(); if (!settled){ settled = true; cleanup(); reject(err); } });
+        }).catch(function(err){
+          if (recorder.state !== 'inactive') recorder.stop();
+          if (!settled){ settled = true; cleanup(); reject(err); }
+        });
       };
     });
   }
@@ -848,20 +842,14 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     el('compressResult').style.display = 'none';
     el('compressPct').textContent = '0%';
     renderCompressRuler(0);
-    banner(cBanner, 'ok', 'Sending video to the local FFmpeg server…');
+    banner(cBanner, 'ok', 'Compressing locally in your browser…');
 
     var bitrates = { 480: 3000000, 720: 6000000, 1080: 12000000 };
-    compressOnServer(state.file, targetHeight, function(status){
-      banner(cBanner, 'ok', status);
-    }).catch(function(serverError){
-      if (!isConnectionError(serverError)) throw serverError;
-      banner(cBanner, 'warn', 'Render server unavailable (' + errText(serverError) + '). Using browser compression instead…');
-      return compressVideo(state.videoEl, targetHeight, bitrates[targetHeight], function(pct){
-        el('compressPct').textContent = Math.round(pct * 100) + '%';
-        renderCompressRuler(pct);
-      });
-    }).then(function(blob){
+    compressVideo(state.videoEl, targetHeight, bitrates[targetHeight], function(pct){
       clearBanner(cBanner);
+      el('compressPct').textContent = Math.round(pct * 100) + '%';
+      renderCompressRuler(pct);
+    }).then(function(blob){
       el('compressProgressWrap').style.display = 'none';
       el('compressBtn').disabled = false;
 
@@ -878,12 +866,12 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       var extension = recordingExtension(blob.type);
       dl.download = (state.file.name || 'video').replace(/\.[^.]+$/, '') + '_compressed.' + extension;
       el('compressResult').style.display = 'block';
-      banner(cBanner, 'ok', 'Compressed to ' + extension.toUpperCase() + '.');
+      banner(cBanner, 'ok', 'Compressed locally to ' + extension.toUpperCase() + '.');
       el('b44UploadBtn').disabled = false;
     }).catch(function(err){
       el('compressProgressWrap').style.display = 'none';
       el('compressBtn').disabled = false;
-      banner(cBanner, 'err', 'Compression failed: ' + err.message);
+      banner(cBanner, 'err', 'Compression failed: ' + errText(err));
     });
   });
 
@@ -976,7 +964,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     el('b44UploadBtn').disabled = true;
     banner(bBanner, 'ok', 'Uploading…');
 
-    var filename = (state.file.name || 'video').replace(/\.[^.]+$/, '').replace(/[^a-z0-9-_]+/gi, '_') + '.' + recordingExtension(blob.type);
+    var filename = (state.file.name || 'video').replace(/\.[^.]+$/, '').replace(/[^a-z0-9-_]+/gi, '_') + '.mp4';
 
     b44Upload(endpoint, apiKey, blob, filename).then(function(result){
       el('b44UploadBtn').disabled = false;
@@ -1006,7 +994,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       }
     }).catch(function(err){
       el('b44UploadBtn').disabled = false;
-      banner(bBanner, 'err', 'Upload failed: ' + err.message);
+      banner(bBanner, 'err', 'Upload failed: ' + errText(err));
     });
   });
 
@@ -1065,7 +1053,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     try {
       JSON.parse(template);
     } catch (err){
-      banner(pBanner, 'err', 'Your editing-output template isn\'t valid JSON (' + err.message + '). Fix it in step 04 before generating the prompt.');
+      banner(pBanner, 'err', 'Your editing-output template isn\'t valid JSON (' + errText(err) + '). Fix it in step 04 before generating the prompt.');
       return;
     }
 
@@ -1187,13 +1175,13 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     try {
       data = extractJsonBlock(raw);
     } catch (err){
-      banner(pBanner, 'err', 'Couldn\'t find valid JSON in that response: ' + err.message);
+      banner(pBanner, 'err', 'Couldn\'t find valid JSON in that response: ' + errText(err));
       return;
     }
     try {
       clips = validateClips(data);
     } catch (err){
-      banner(pBanner, 'err', 'The editing plan has a problem: ' + err.message);
+      banner(pBanner, 'err', 'The editing plan has a problem: ' + errText(err));
       return;
     }
 
@@ -1271,31 +1259,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       var cropX = (srcW - cropW) / 2, cropY = (srcH - cropH) / 2;
 
       var stream = canvas.captureStream(30);
-      var audioContext = null;
-      var audioSource = null;
-      var audioDestination = null;
-      var sourceStream = (sourceVideo.captureStream || sourceVideo.mozCaptureStream);
-      var capturedStream = sourceStream ? sourceStream.call(sourceVideo) : null;
-      if (capturedStream && capturedStream.getAudioTracks().length){
-        capturedStream.getAudioTracks().forEach(function(track){ stream.addTrack(track); });
-        if (window.AudioContext){
-          audioContext = new AudioContext();
-          var capturedAudio = new MediaStream(capturedStream.getAudioTracks());
-          audioSource = audioContext.createMediaStreamSource(capturedAudio);
-          audioDestination = audioContext.createMediaStreamDestination();
-          audioSource.connect(audioDestination);
-          if (state.playAudio) audioSource.connect(audioContext.destination);
-        }
-      }
-      var recorder;
-      try {
-        recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5_000_000 });
-      } catch (err){
-        stream.getTracks().forEach(function(track){ track.stop(); });
-        if (audioContext) audioContext.close();
-        reject(err);
-        return;
-      }
+      var recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5_000_000 });
       var chunks = [];
       recorder.ondataavailable = function(e){ if (e.data.size > 0) chunks.push(e.data); };
 
@@ -1311,16 +1275,10 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       }
 
       recorder.onstop = function(){
-        var blob = new Blob(chunks, { type: recorder.mimeType || mime });
-        stream.getTracks().forEach(function(track){ track.stop(); });
-        if (audioContext) audioContext.close();
+        var blob = new Blob(chunks, { type: 'video/webm' });
         resolve(blob);
       };
-      recorder.onerror = function(e){
-        stream.getTracks().forEach(function(track){ track.stop(); });
-        if (audioContext) audioContext.close();
-        reject(e.error || new Error('Recording failed.'));
-      };
+      recorder.onerror = function(e){ reject(e.error || new Error('Recording failed.')); };
 
       function drawFrame(){
         var elapsed = sourceVideo.currentTime - clip.start;
@@ -1358,8 +1316,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       sourceVideo.onseeked = function(){
         sourceVideo.onseeked = null;
         recorder.start();
-        var audioReady = audioContext ? audioContext.resume() : Promise.resolve();
-        audioReady.then(function(){ return sourceVideo.play(); }).then(function(){
+        sourceVideo.play().then(function(){
           requestAnimationFrame(drawFrame);
         }).catch(reject);
       };
@@ -1439,8 +1396,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     renderVideo.src = state.videoEl.src;
     renderVideo.crossOrigin = 'anonymous';
     renderVideo.playsInline = true;
-    renderVideo.muted = false;
-    renderVideo.volume = state.playAudio ? 1 : 0;
+    renderVideo.muted = !state.playAudio;
     renderVideo.style.display = 'none';
     document.body.appendChild(renderVideo);
 
@@ -1479,7 +1435,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
           addResultCard(clip, blob);
           next(index + 1);
         }).catch(function(err){
-          banner(rBanner, 'err', 'Failed to render "' + clip.title + '": ' + err.message);
+          banner(rBanner, 'err', 'Failed to render "' + clip.title + '": ' + errText(err));
           completed++;
           next(index + 1);
         });
@@ -1503,7 +1459,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
         '<div class="title">' + clip.title + '</div>' +
         '<div class="time">' + formatDuration(clip.start) + ' – ' + formatDuration(clip.end) + ' · ' + clip.aspectRatio + '</div>' +
       '</div>' +
-      '<a class="btn-primary dl" download="' + clip.title.replace(/[^a-z0-9]+/gi,'_') + '.' + recordingExtension(blob.type) + '" href="' + url + '">Download</a>';
+      '<a class="btn-primary dl" download="' + clip.title.replace(/[^a-z0-9]+/gi,'_') + '.webm" href="' + url + '">Download</a>';
     el('results').appendChild(card);
   }
 
