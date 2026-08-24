@@ -1,9 +1,12 @@
 import json
+import cgi
+import http.server
 import os
 import queue
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -16,6 +19,101 @@ DEFAULT_TEMPLATE = json.dumps([{
     "hook": "Scroll stopping hook", "captions": ["Caption line 1", "Caption line 2"],
     "aspectRatio": "9:16", "effects": ["zoom-in"]
 }], indent=2)
+
+
+def find_ffmpeg_binary(name):
+    binary_name = name + (".exe" if os.name == "nt" else "")
+    if shutil.which(name):
+        return shutil.which(name)
+    roots = [Path(__file__).resolve().parent / "bin"]
+    if getattr(sys, "frozen", False):
+        roots.insert(0, Path(sys._MEIPASS) / "bin")
+    for root in roots:
+        candidate = root / binary_name
+        if candidate.exists():
+            return str(candidate)
+    raise FileNotFoundError(f"Could not find bundled {binary_name}.")
+
+
+class CompressionHandler(http.server.BaseHTTPRequestHandler):
+    server_version = "ReelCutterLocalFFmpeg/1.0"
+
+    def _cors(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors()
+        self.end_headers()
+
+    def do_POST(self):
+        if self.path != "/compress":
+            self.send_error(404)
+            return
+        input_path = None
+        output_path = None
+        try:
+            form = cgi.FieldStorage(
+                fp=self.rfile,
+                headers=self.headers,
+                environ={"REQUEST_METHOD": "POST", "CONTENT_TYPE": self.headers.get("Content-Type", "")},
+            )
+            if "video" not in form:
+                self._json_error(400, "Attach a video using the video field.")
+                return
+            height = int(form.getfirst("height", "720"))
+            if height not in (480, 720, 1080):
+                self._json_error(400, "height must be 480, 720, or 1080.")
+                return
+            with tempfile.NamedTemporaryFile(prefix="reel-cutter-", suffix=".input", delete=False) as source:
+                input_path = source.name
+                field = form["video"]
+                while True:
+                    chunk = field.file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    source.write(chunk)
+            output_path = tempfile.mktemp(prefix="reel-cutter-", suffix=".mp4")
+            subprocess.run([
+                find_ffmpeg_binary("ffmpeg"), "-hide_banner", "-loglevel", "error", "-i", input_path,
+                "-vf", f"scale=-2:{height}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
+                "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-y", output_path,
+            ], check=True, capture_output=True, text=True)
+            data = Path(output_path).read_bytes()
+            self.send_response(200)
+            self._cors()
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Content-Disposition", 'attachment; filename="compressed.mp4"')
+            self.end_headers()
+            self.wfile.write(data)
+        except (ValueError, KeyError):
+            self._json_error(400, "Invalid compression request.")
+        except subprocess.CalledProcessError as error:
+            self._json_error(500, error.stderr.strip() or "FFmpeg compression failed.")
+        except Exception as error:
+            self._json_error(500, str(error))
+        finally:
+            for path in (input_path, output_path):
+                if path:
+                    try:
+                        os.unlink(path)
+                    except OSError:
+                        pass
+
+    def _json_error(self, status, message):
+        body = json.dumps({"error": message}).encode("utf-8")
+        self.send_response(status)
+        self._cors()
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *_args):
+        return
 
 
 class ReelCutterApp:
@@ -418,6 +516,42 @@ def main():
         raise SystemExit(f"Could not find the bundled website UI at {html_path}.")
 
     html = html_path.read_text(encoding="utf-8")
+    local_server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), CompressionHandler)
+    threading.Thread(target=local_server.serve_forever, daemon=True).start()
+    local_compress_url = f"http://127.0.0.1:{local_server.server_port}/compress"
+    html = html.replace(
+        '        <button class="btn-ghost" id="splitBtn" type="button" disabled>Split into 2 chunks</button>\n',
+        "",
+    )
+    html = html.replace("      el('splitBtn').disabled = false;\n", "")
+    split_start = html.find("  el('splitBtn').addEventListener('click'")
+    if split_start >= 0:
+        split_end = html.find("  function renderCompressRuler", split_start)
+        html = html[:split_start] + html[split_end:]
+    html = html.replace(
+        "    banner(cBanner, 'ok', 'Loading the ffmpeg engine (first run only)…');",
+        "    banner(cBanner, 'ok', 'Compressing with local FFmpeg…');",
+    )
+    html = html.replace(
+        "    compressVideo(state.file, targetHeight, function(pct){",
+        "    compressWithLocalServer(state.file, targetHeight, function(pct){",
+        1,
+    )
+    marker = "  function compressVideo(file, targetHeight, onProgress){"
+    helper = """  function compressWithLocalServer(file, targetHeight, onProgress){
+    onProgress(0);
+    var form = new FormData();
+    form.append('video', file, file.name);
+    form.append('height', String(targetHeight));
+    return fetch(compressionUrl, { method: 'POST', body: form }).then(function(res){
+      if (!res.ok) return res.text().then(function(text){ throw new Error(text || 'Local FFmpeg compression failed.'); });
+      onProgress(1);
+      return res.blob();
+    });
+  }
+
+"""
+    html = html.replace(marker, "  var compressionUrl = '" + local_compress_url + "';\n\n" + helper + marker, 1)
     html = html.replace(
         '<p><a class="btn-primary" href="https://github.com/jryoung201-code/LongFromToShortCompreser/releases/latest/download/ReelCutter.exe">Download the Windows app</a></p>',
         "",

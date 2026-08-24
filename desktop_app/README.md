@@ -2,6 +2,8 @@
 
 This is the native desktop version of Reel Cutter. It opens the same HTML interface as the website inside a native window and keeps video processing on the user's computer.
 
+The EXE starts a private localhost FFmpeg service automatically. The HTML compression control sends the video to that local service instead of loading the entire file into browser WebAssembly memory. The desktop copy hides the website download link, browser warning, and split control.
+
 ## Run locally
 
 The downloadable Windows EXE includes `ffmpeg.exe` and `ffprobe.exe`. For running the Python source directly, install FFmpeg and make sure both `ffmpeg` and `ffprobe` are on PATH. Then run:
