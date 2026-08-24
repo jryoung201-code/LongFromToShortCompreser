@@ -175,14 +175,7 @@
   .btn-ghost:hover:not(:disabled){ border-color: var(--text-dim); }
   .btn-row{ display:flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 
-  .timeline-ruler{
-    height: 26px;
-    display:flex;
-    align-items:flex-end;
-    gap: 2px;
-    margin: 18px 0 6px;
-  }
-  .progress-label{ font-family: var(--mono); font-size: 12px; color: var(--text-dim); display:flex; justify-content:space-between; }
+  .progress-label{ font-family: var(--mono); font-size: 12px; color: var(--text-dim); display:flex; justify-content:space-between; margin-top: 10px; }
 
   .audio-toggle{
     display:flex; align-items:center; gap:8px; margin-top:14px; font-size:13px; color:var(--text-dim); cursor:pointer;
@@ -213,7 +206,6 @@
     border: 1px solid;
   }
   .banner.err{ background: rgba(255,77,109,.08); border-color: var(--rec); color: #ffb3c1; }
-  .banner.warn{ background: rgba(245,197,24,.08); border-color: var(--warn); color: #f5dc8f; }
   .banner.ok{ background: rgba(0,217,184,.08); border-color: var(--accent); color: #9df3e6; }
 
   footer{ text-align:center; color: var(--text-dim); font-size: 12px; padding: 40px 0 10px; font-family: var(--mono); }
@@ -265,19 +257,19 @@
     <div class="step-num"><b>02</b>Shrink</div>
     <div>
       <h2>Hardware-Accelerated Compression</h2>
-      <p class="desc">Combines stacked resolution scaling, framerate management, and high-efficiency browser encoding.</p>
+      <p class="desc">Encodes directly via GPU stream pipelines without hitting memory caps.</p>
 
       <div class="btn-row">
         <select id="compressPreset" disabled style="width: auto;">
-          <option value="480">480p — Ultra Compression (~1.2 Mbps)</option>
-          <option value="720" selected>720p — Balanced (~2.5 Mbps)</option>
-          <option value="1080">1080p — High Quality (~4.5 Mbps)</option>
+          <option value="480">480p — Compact (3.0 Mbps)</option>
+          <option value="720" selected>720p — Balanced High Quality (6.0 Mbps)</option>
+          <option value="1080">1080p — Crisp Ultra (12.0 Mbps)</option>
         </select>
         <button class="btn-primary" id="compressBtn" type="button" disabled>Compress video natively</button>
       </div>
 
       <div id="compressProgressWrap" style="display:none;">
-        <div class="progress-label"><span id="compressLabel">Streaming & Encoding…</span><span id="compressPct">0%</span></div>
+        <div class="progress-label"><span id="compressLabel">Streaming &amp; Encoding…</span><span id="compressPct">0%</span></div>
       </div>
 
       <div id="compressBanner"></div>
@@ -412,6 +404,7 @@
 
   function el(id){ return document.getElementById(id); }
   function banner(container, type, msg){ container.innerHTML = '<div class="banner ' + type + '">' + msg + '</div>'; }
+  function clearBanner(container){ container.innerHTML = ''; }
   function formatBytes(bytes){
     if (!bytes) return '0 B';
     var units = ['B','KB','MB','GB'];
@@ -448,7 +441,7 @@
     };
   }
 
-  // --- Native Stream Compressor ---
+  // --- Native Hardware Stream Compressor ---
   function compressNative(sourceVideo, targetHeight, bitrate, onProgress){
     return new Promise(function(resolve, reject){
       var canvas = document.createElement('canvas');
@@ -457,8 +450,9 @@
       canvas.width = Math.round(sourceVideo.videoWidth * scale);
       canvas.height = targetHeight;
 
-      var stream = canvas.captureStream(24);
+      var stream = canvas.captureStream(30);
 
+      // Attach audio track
       if (sourceVideo.captureStream || sourceVideo.mozCaptureStream) {
         var audioStream = (sourceVideo.captureStream || sourceVideo.mozCaptureStream).call(sourceVideo);
         audioStream.getAudioTracks().forEach(function(track){ stream.addTrack(track); });
@@ -470,35 +464,49 @@
       var recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate });
       var chunks = [];
       recorder.ondataavailable = function(e){ if (e.data.size > 0) chunks.push(e.data); };
-      recorder.onstop = function(){ resolve(new Blob(chunks, { type: 'video/webm' })); };
-      recorder.onerror = function(e){ reject(e.error || new Error('Stream compression failed.')); };
+      recorder.onstop = function(){
+        sourceVideo.muted = false;
+        resolve(new Blob(chunks, { type: 'video/webm' }));
+      };
+      recorder.onerror = function(e){
+        sourceVideo.muted = false;
+        reject(e.error || new Error('Stream compression failed.'));
+      };
 
-      var compVideo = document.createElement('video');
-      compVideo.src = sourceVideo.src;
-      compVideo.muted = true;
+      sourceVideo.currentTime = 0;
+      sourceVideo.muted = true;
 
-      compVideo.onloadedmetadata = function(){
+      sourceVideo.onseeked = function(){
+        sourceVideo.onseeked = null;
         recorder.start();
-        compVideo.play();
-
-        function step(){
-          if (compVideo.paused || compVideo.ended){
-            recorder.stop();
-            return;
-          }
-          ctx.drawImage(compVideo, 0, 0, canvas.width, canvas.height);
-          onProgress(compVideo.currentTime / compVideo.duration);
-          requestAnimationFrame(step);
+        
+        var playPromise = sourceVideo.play();
+        if (playPromise !== undefined) {
+          playPromise.then(function() {
+            function step(){
+              if (sourceVideo.paused || sourceVideo.ended){
+                if (recorder.state !== 'inactive') recorder.stop();
+                return;
+              }
+              if (sourceVideo.readyState >= 2) {
+                ctx.drawImage(sourceVideo, 0, 0, canvas.width, canvas.height);
+              }
+              onProgress(sourceVideo.currentTime / sourceVideo.duration);
+              requestAnimationFrame(step);
+            }
+            step();
+          }).catch(reject);
         }
-        step();
       };
     });
   }
 
   el('compressBtn').addEventListener('click', function(){
     var targetH = parseInt(el('compressPreset').value, 10);
-    var bitrates = { 480: 1200000, 720: 2500000, 1080: 4500000 };
+    // Increased bitrates: 3Mbps, 6Mbps, 12Mbps
+    var bitrates = { 480: 3000000, 720: 6000000, 1080: 12000000 };
     
+    clearBanner(el('compressBanner'));
     el('compressBtn').disabled = true;
     el('compressProgressWrap').style.display = 'block';
 
@@ -569,7 +577,7 @@
     }
   });
 
-  // --- Render Clip Shorts (AUDIO FIX INCLUDED) ---
+  // --- Render Clip Shorts ---
   el('renderBtn').addEventListener('click', function(){
     el('progressWrap').style.display = 'block';
     el('results').innerHTML = '';
@@ -579,7 +587,6 @@
     var ctx = canvas.getContext('2d');
     canvas.width = 360; canvas.height = 640;
 
-    // Toggle speaker audio playback during render
     var playAudible = el('audioToggle').checked;
     state.videoEl.muted = !playAudible;
 
@@ -587,7 +594,7 @@
     function renderNext(){
       if (index >= clips.length){
         el('progressWrap').style.display = 'none';
-        state.videoEl.muted = false; // Restore default sound
+        state.videoEl.muted = false;
         return;
       }
 
@@ -597,7 +604,6 @@
 
       var stream = canvas.captureStream(30);
 
-      // ATTACH SOURCE AUDIO TRACK TO CANVAS MEDIASTREAM
       if (state.videoEl.captureStream || state.videoEl.mozCaptureStream) {
         var sourceStream = (state.videoEl.captureStream || state.videoEl.mozCaptureStream).call(state.videoEl);
         sourceStream.getAudioTracks().forEach(function(track){
@@ -608,7 +614,7 @@
       var mime = 'video/webm;codecs=vp9,opus';
       if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
 
-      var recorder = new MediaRecorder(stream, { mimeType: mime });
+      var recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6000000 });
       var chunks = [];
       recorder.ondataavailable = function(e){ if (e.data.size > 0) chunks.push(e.data); };
       recorder.onstop = function(){
@@ -637,7 +643,9 @@
             recorder.stop();
             return;
           }
-          ctx.drawImage(state.videoEl, 0, 0, canvas.width, canvas.height);
+          if (state.videoEl.readyState >= 2) {
+            ctx.drawImage(state.videoEl, 0, 0, canvas.width, canvas.height);
+          }
           requestAnimationFrame(draw);
         }
         draw();
