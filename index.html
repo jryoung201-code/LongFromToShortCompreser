@@ -333,42 +333,29 @@
       </div>
 
       <div class="gh-panel">
-        <label class="field-label">Push the compressed file to GitHub (temporary)</label>
-        <p class="desc">Uploads directly from your browser to the GitHub API — nothing passes through any other server. The token stays only in this tab's memory and is used solely for this upload call; it is never included in the generated prompt text, since that gets pasted into an AI chat and a write-capable token doesn't belong there. The file auto-deletes after 5 minutes on a timer (GitHub doesn't expose access logs, so this is time-based, not based on whether it was actually fetched).</p>
+        <label class="field-label">Push the compressed file to your Base44 file store</label>
+        <p class="desc">Uploads directly from your browser to your Base44 app's file API — nothing passes through any other server. The API key stays only in this tab's memory and is used solely for this upload call; it is never included in the generated prompt text.</p>
 
-        <div id="ghRepoDetected" class="video-meta" style="display:none;"></div>
-        <div id="ghRepoManual" style="display:none;">
-          <input type="text" id="ghOwner" placeholder="GitHub username or org">
-          <input type="text" id="ghRepo" placeholder="Repo name (e.g. your-username.github.io)" style="margin-top:8px;">
-          <input type="text" id="ghBranch" placeholder="Branch (default: main)" style="margin-top:8px;">
-        </div>
-        <button class="btn-ghost" id="ghEditRepoBtn" type="button" style="margin-top:8px;">Not the right repo? Edit</button>
-
-        <label class="field-label">Personal access token</label>
-        <input type="password" id="ghToken" placeholder="Paste a token scoped to this repo's contents (read & write)">
-        <p class="desc" style="margin-top:6px;">
-          Don't have one handy? <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" style="color:var(--accent);">Create a fine-grained token on GitHub</a> —
-          scope it to <strong>this repository only</strong>, and under Permissions set <strong>Contents: Read and write</strong>. GitHub is the only place that can issue one; this page can't generate a working token for you.
-        </p>
+        <input type="text" id="b44Endpoint" placeholder="Endpoint URL" value="https://bizarre-omni-vault-drive.base44.app/api/apps/6a8c2a0a0918273d8c60b97b/functions/fileApi">
+        <input type="password" id="b44Key" placeholder="x-api-key" style="margin-top:8px;">
 
         <div class="btn-row">
-          <button class="btn-primary" id="ghUploadBtn" type="button" disabled>Upload compressed file to GitHub</button>
+          <button class="btn-primary" id="b44UploadBtn" type="button" disabled>Upload compressed file to Base44</button>
         </div>
 
-        <div id="ghBanner"></div>
+        <div id="b44Banner"></div>
 
-        <div id="ghResult" style="display:none;">
-          <div class="video-meta" id="ghMeta"></div>
-          <div class="progress-label" style="margin-top:10px;"><span id="ghCountdownLabel">Auto-deletes in 5:00</span></div>
-          <div class="btn-row">
-            <button class="btn-ghost" id="ghKeepBtn" type="button">Keep this file (cancel auto-delete)</button>
-            <button class="btn-ghost" id="ghDeleteNowBtn" type="button">Delete now</button>
+        <div id="b44Result" style="display:none;">
+          <div class="video-meta" id="b44Meta"></div>
+          <div id="b44RawWrap" style="display:none;">
+            <label class="field-label">Raw response (couldn't find a link field automatically — copy it from here)</label>
+            <textarea id="b44Raw" rows="6" readonly spellcheck="false"></textarea>
           </div>
         </div>
       </div>
 
-      <label class="field-label">Hosted video link (optional, filled automatically after a GitHub upload)</label>
-      <input type="text" id="videoLinkInput" placeholder="e.g. https://raw.githubusercontent.com/you/repo/main/clip.mp4">
+      <label class="field-label">Hosted video link (optional, filled automatically after a Base44 upload)</label>
+      <input type="text" id="videoLinkInput" placeholder="e.g. https://your-base44-app.base44.app/files/abc123.mp4">
       <p class="desc" style="margin-top:8px;">You can also paste a link here yourself if you host the video some other way. The generated prompt will mention this link. Not every model can actually fetch a file from a URL, so it's worth still attaching the file directly wherever that's an option.</p>
     </div>
   </section>
@@ -714,8 +701,12 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
   }
 
   // ---------------------------------------------------------------------
-  // STEP 2 — Compress & link
+  // STEP 2 — Compress & link (uses ffmpeg.wasm, self-hosted from this repo —
+  // see FFMPEG_BASE below. Compression itself, not the later short-cutting
+  // step, which still uses canvas + MediaRecorder.)
   // ---------------------------------------------------------------------
+
+  // Shared by the short-cutting/render step below, which still uses canvas + MediaRecorder.
   function pickMimeType(){
     var candidates = [
       'video/webm;codecs=vp9,opus',
@@ -728,54 +719,77 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     return null;
   }
 
-  var BITRATE_BY_HEIGHT = { 480: 1_200_000, 720: 2_500_000, 1080: 4_500_000 };
+  // Where the ffmpeg.wasm vendor files live relative to this HTML file.
+  // Adjust this if your repo structure differs (e.g. a Jekyll baseurl prefix).
+  var FFMPEG_BASE = 'assets/vendor/ffmpeg/';
+
+  var ffmpegInstance = null;
+  var ffmpegLoadPromise = null;
+
+  function loadScriptTag(src){
+    return new Promise(function(resolve, reject){
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = function(){ resolve(); };
+      s.onerror = function(){ reject(new Error('Could not load ' + src + ' — check that the ffmpeg vendor files are actually at that path in this repo.')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function getFfmpeg(){
+    if (ffmpegLoadPromise) return ffmpegLoadPromise;
+    ffmpegLoadPromise = loadScriptTag(FFMPEG_BASE + 'ffmpeg.js').then(function(){
+      if (!window.FFmpegWASM){
+        throw new Error('ffmpeg.js loaded but did not expose FFmpegWASM — the vendor files may be the wrong version.');
+      }
+      var ffmpeg = new window.FFmpegWASM.FFmpeg();
+      return ffmpeg.load({
+        coreURL: FFMPEG_BASE + 'ffmpeg-core.js',
+        wasmURL: FFMPEG_BASE + 'ffmpeg-core.wasm'
+      }).then(function(){
+        ffmpegInstance = ffmpeg;
+        return ffmpeg;
+      });
+    });
+    return ffmpegLoadPromise;
+  }
+
+  var CRF_BY_HEIGHT = { 480: 28, 720: 26, 1080: 23 };
 
   function compressVideo(file, targetHeight, onProgress){
-    return new Promise(function(resolve, reject){
-      var mime = pickMimeType();
-      if (!mime){
-        reject(new Error('Your browser does not support recording video (MediaRecorder). Try a recent Chrome, Edge, or Firefox.'));
-        return;
-      }
+    return getFfmpeg().then(function(ffmpeg){
+      var inName = 'input_' + Date.now();
+      var outName = 'output_' + Date.now() + '.mp4';
 
-      var vid = document.createElement('video');
-      vid.src = URL.createObjectURL(file);
-      vid.muted = true;
-      vid.playsInline = true;
-      vid.style.display = 'none';
-      document.body.appendChild(vid);
-
-      vid.onloadedmetadata = function(){
-        var srcW = vid.videoWidth, srcH = vid.videoHeight;
-        var scale = Math.min(1, targetHeight / srcH);
-        var w = Math.round(srcW * scale / 2) * 2;
-        var h = Math.round(srcH * scale / 2) * 2;
-
-        var canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        var ctx = canvas.getContext('2d');
-
-        var stream = canvas.captureStream(30);
-        var recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: BITRATE_BY_HEIGHT[targetHeight] || 2_500_000 });
-        var chunks = [];
-        recorder.ondataavailable = function(e){ if (e.data.size > 0) chunks.push(e.data); };
-        recorder.onstop = function(){
-          vid.remove();
-          resolve(new Blob(chunks, { type: 'video/webm' }));
-        };
-        recorder.onerror = function(e){ vid.remove(); reject(e.error || new Error('Compression failed.')); };
-
-        function drawFrame(){
-          ctx.drawImage(vid, 0, 0, w, h);
-          onProgress(vid.duration ? Math.min(1, vid.currentTime / vid.duration) : 0);
-          if (vid.ended){ recorder.stop(); return; }
-          requestAnimationFrame(drawFrame);
-        }
-
-        recorder.start();
-        vid.play().then(function(){ requestAnimationFrame(drawFrame); }).catch(reject);
+      var progressHandler = function(evt){
+        var pct = evt && typeof evt.progress === 'number' ? evt.progress : 0;
+        onProgress(Math.max(0, Math.min(1, pct)));
       };
-      vid.onerror = function(){ vid.remove(); reject(new Error('Could not read the video for compression.')); };
+      ffmpeg.on('progress', progressHandler);
+
+      return file.arrayBuffer().then(function(buf){
+        return ffmpeg.writeFile(inName, new Uint8Array(buf));
+      }).then(function(){
+        var crf = CRF_BY_HEIGHT[targetHeight] || 26;
+        // scale=-2:H keeps aspect ratio, forces an even width (required by libx264)
+        return ffmpeg.exec([
+          '-i', inName,
+          '-vf', 'scale=-2:' + targetHeight,
+          '-c:v', 'libx264', '-preset', 'veryfast', '-crf', String(crf),
+          '-c:a', 'aac', '-b:a', '128k',
+          outName
+        ]);
+      }).then(function(){
+        return ffmpeg.readFile(outName);
+      }).then(function(data){
+        ffmpeg.off('progress', progressHandler);
+        ffmpeg.deleteFile(inName).catch(function(){});
+        ffmpeg.deleteFile(outName).catch(function(){});
+        return new Blob([data.buffer], { type: 'video/mp4' });
+      }).catch(function(err){
+        ffmpeg.off('progress', progressHandler);
+        throw err;
+      });
     });
   }
 
@@ -809,8 +823,12 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     el('compressBtn').disabled = true;
     el('compressProgressWrap').style.display = 'block';
     el('compressResult').style.display = 'none';
+    el('compressPct').textContent = '0%';
+    renderCompressRuler(0);
+    banner(cBanner, 'ok', 'Loading the ffmpeg engine (first run only)…');
 
     compressVideo(state.file, targetHeight, function(pct){
+      clearBanner(cBanner);
       el('compressPct').textContent = Math.round(pct * 100) + '%';
       renderCompressRuler(pct);
     }).then(function(blob){
@@ -827,10 +845,10 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
         '<span><b>Reduction</b> ' + (reduction > 0 ? reduction + '%' : '—') + '</span>';
       var dl = el('compressedDownload');
       dl.href = url;
-      dl.download = (state.file.name || 'video').replace(/\.[^.]+$/, '') + '_compressed.webm';
+      dl.download = (state.file.name || 'video').replace(/\.[^.]+$/, '') + '_compressed.mp4';
       el('compressResult').style.display = 'block';
-      banner(cBanner, 'ok', 'Compressed. Note the output is .webm — if the target platform needs .mp4, you\'ll need to convert it separately.');
-      el('ghUploadBtn').disabled = false;
+      banner(cBanner, 'ok', 'Compressed to a real .mp4.');
+      el('b44UploadBtn').disabled = false;
     }).catch(function(err){
       el('compressProgressWrap').style.display = 'none';
       el('compressBtn').disabled = false;
@@ -843,203 +861,121 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
   });
 
   // -----------------------------------------------------------------
-  // GitHub push (Contents API) + timed auto-delete
+  // Base44 file-store push
   // -----------------------------------------------------------------
-  var gh = { sha: null, path: null, owner: null, repo: null, branch: null, token: null, timer: null, countdown: 0 };
 
-  // Try to work out owner/repo from the URL this page is actually being served from
-  // (GitHub Pages serves user/org pages at owner.github.io/, project pages at owner.github.io/repo/).
-  function detectRepoFromLocation(){
-    var host = window.location.hostname;
-    if (!host.endsWith('.github.io')) return null;
-    var owner = host.slice(0, -('.github.io'.length));
-    var segments = window.location.pathname.split('/').filter(Boolean);
-    var repo, branch = 'main';
-    if (segments.length > 0){
-      repo = segments[0];
-    } else {
-      repo = owner + '.github.io'; // user/org root page repo
-    }
-    return { owner: owner, repo: repo, branch: branch };
-  }
-
-  var detected = detectRepoFromLocation();
-  if (detected){
-    gh.owner = detected.owner; gh.repo = detected.repo; gh.branch = detected.branch;
-    el('ghRepoDetected').style.display = 'flex';
-    el('ghRepoDetected').innerHTML =
-      '<span><b>Repo</b> ' + detected.owner + '/' + detected.repo + '</span>' +
-      '<span><b>Branch</b> ' + detected.branch + '</span>';
-  } else {
-    el('ghRepoManual').style.display = 'block';
-    banner(el('ghBanner'), 'warn', 'Couldn\'t detect a repo from this page\'s URL (it\'s not being served from a *.github.io address right now), so fill in the repo details manually below.');
-  }
-
-  el('ghEditRepoBtn').addEventListener('click', function(){
-    var manual = el('ghRepoManual');
-    var showing = manual.style.display === 'block';
-    manual.style.display = showing ? 'none' : 'block';
-    el('ghRepoDetected').style.display = showing ? 'flex' : 'none';
-    if (!showing){
-      el('ghOwner').value = gh.owner || '';
-      el('ghRepo').value = gh.repo || '';
-      el('ghBranch').value = gh.branch || 'main';
-    }
-  });
-
-  function blobToBase64(blob){
-    return new Promise(function(resolve, reject){
-      var reader = new FileReader();
-      reader.onload = function(){ resolve(reader.result.split(',')[1]); };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  function ghApi(path, opts, token){
-    return fetch('https://api.github.com' + path, Object.assign({
-      headers: Object.assign({
-        'Authorization': 'token ' + token,
-        'Accept': 'application/vnd.github+json'
-      }, (opts && opts.headers) || {})
-    }, opts)).then(function(res){
-      return res.json().then(function(body){
+  function b44Upload(endpoint, apiKey, blob, filename){
+    var form = new FormData();
+    form.append('file', blob, filename);
+    return fetch(endpoint, {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey },
+      body: form
+    }).then(function(res){
+      return res.text().then(function(text){
+        var json = null;
+        try { json = JSON.parse(text); } catch (e){ /* not JSON, leave null */ }
         if (!res.ok){
-          var msg = (body && body.message) || (res.status + ' ' + res.statusText);
+          var msg = (json && (json.message || json.error)) || (res.status + ' ' + res.statusText);
           throw new Error(msg);
         }
-        return body;
+        return { raw: text, json: json };
       });
     });
   }
 
-  function formatCountdown(sec){
-    var m = Math.floor(sec / 60), s = sec % 60;
-    return m + ':' + String(s).padStart(2, '0');
-  }
-
-  function stopCountdown(){
-    if (gh.timer){ clearInterval(gh.timer); gh.timer = null; }
-  }
-
-  function startCountdown(){
-    gh.countdown = 300; // 5 minutes
-    el('ghCountdownLabel').textContent = 'Auto-deletes in ' + formatCountdown(gh.countdown);
-    stopCountdown();
-    gh.timer = setInterval(function(){
-      gh.countdown--;
-      if (gh.countdown <= 0){
-        stopCountdown();
-        el('ghCountdownLabel').textContent = 'Deleting…';
-        deleteGhFile().then(function(){
-          banner(el('ghBanner'), 'ok', 'The 5-minute timer ran out, so the temporary file was deleted from the repo.');
-          el('ghResult').style.display = 'none';
-        }).catch(function(err){
-          banner(el('ghBanner'), 'err', 'Timer expired but deletion failed: ' + err.message + '. You may need to remove it from the repo manually.');
-        });
-        return;
+  // StoredFile records use `file_url` — that's checked first since it's the
+  // documented field name. The rest stay as fallbacks in case the upload
+  // response wraps the record differently (e.g. under "data" or "file").
+  function extractStoredFile(json){
+    if (!json || typeof json !== 'object') return null;
+    var candidates = [
+      json, json.data, json.file, json.record, json.result
+    ];
+    for (var i = 0; i < candidates.length; i++){
+      var c = candidates[i];
+      if (c && typeof c === 'object' && typeof c.file_url === 'string' && /^https?:\/\//.test(c.file_url)){
+        return c;
       }
-      el('ghCountdownLabel').textContent = 'Auto-deletes in ' + formatCountdown(gh.countdown);
-    }, 1000);
+    }
+    return null;
   }
 
-  function deleteGhFile(){
-    if (!gh.sha) return Promise.resolve();
-    return ghApi('/repos/' + gh.owner + '/' + gh.repo + '/contents/' + gh.path, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: 'Remove temporary video (auto-delete)',
-        sha: gh.sha,
-        branch: gh.branch
-      })
-    }, gh.token).then(function(){ gh.sha = null; });
+  function extractLinkFromResponse(json){
+    var stored = extractStoredFile(json);
+    if (stored) return stored.file_url;
+
+    if (!json || typeof json !== 'object') return null;
+    var candidates = [
+      json.url, json.fileUrl, json.downloadUrl, json.download_url,
+      json.publicUrl, json.public_url, json.link,
+      json.data && json.data.url,
+      json.file && json.file.url,
+      json.result && json.result.url
+    ];
+    for (var i = 0; i < candidates.length; i++){
+      if (typeof candidates[i] === 'string' && /^https?:\/\//.test(candidates[i])) return candidates[i];
+    }
+    return null;
   }
 
-  el('ghUploadBtn').addEventListener('click', function(){
-    var gBanner = el('ghBanner');
-    clearBanner(gBanner);
+  el('b44UploadBtn').addEventListener('click', function(){
+    var bBanner = el('b44Banner');
+    clearBanner(bBanner);
 
     if (!state.compressedBlob){
-      banner(gBanner, 'warn', 'Compress the video first — that\'s what gets uploaded.');
+      banner(bBanner, 'warn', 'Compress the video first — that\'s what gets uploaded.');
       return;
     }
 
-    var manualShown = el('ghRepoManual').style.display === 'block';
-    var owner = manualShown ? el('ghOwner').value.trim() : gh.owner;
-    var repo = manualShown ? el('ghRepo').value.trim() : gh.repo;
-    var branch = (manualShown ? el('ghBranch').value.trim() : gh.branch) || 'main';
-    var token = el('ghToken').value.trim();
+    var endpoint = el('b44Endpoint').value.trim();
+    var apiKey = el('b44Key').value.trim();
 
-    if (!owner || !repo || !token){
-      banner(gBanner, 'warn', 'Fill in the GitHub username, repo name, and a personal access token.');
+    if (!endpoint || !apiKey){
+      banner(bBanner, 'warn', 'Fill in the endpoint URL and your x-api-key.');
       return;
     }
 
     var blob = state.compressedBlob;
-    if (blob.size > 90 * 1024 * 1024){
-      banner(gBanner, 'warn', 'This file is ' + formatBytes(blob.size) + ' — GitHub\'s API tops out around 100MB per file. Try the 480p preset for a smaller file.');
+    if (blob.size > 100 * 1024 * 1024){
+      banner(bBanner, 'warn', 'This file is ' + formatBytes(blob.size) + ', over the common 100MB upload ceiling. Try the 480p preset for a smaller file.');
       return;
     }
 
-    el('ghUploadBtn').disabled = true;
-    banner(gBanner, 'ok', 'Uploading…');
+    el('b44UploadBtn').disabled = true;
+    banner(bBanner, 'ok', 'Uploading…');
 
-    var filename = (state.file.name || 'video').replace(/\.[^.]+$/, '').replace(/[^a-z0-9-_]+/gi, '_');
-    var path = 'temp-videos/' + Date.now() + '-' + filename + '.webm';
+    var filename = (state.file.name || 'video').replace(/\.[^.]+$/, '').replace(/[^a-z0-9-_]+/gi, '_') + '.mp4';
 
-    blobToBase64(blob).then(function(base64){
-      return ghApi('/repos/' + owner + '/' + repo + '/contents/' + path, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: 'Add temporary video for AI prompt (auto-deletes in 5 min)',
-          content: base64,
-          branch: branch
-        })
-      }, token);
-    }).then(function(result){
-      gh.sha = result.content.sha;
-      gh.path = path;
-      gh.owner = owner;
-      gh.repo = repo;
-      gh.branch = branch;
-      gh.token = token;
+    b44Upload(endpoint, apiKey, blob, filename).then(function(result){
+      el('b44UploadBtn').disabled = false;
+      clearBanner(bBanner);
 
-      var rawUrl = 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/' + branch + '/' + path;
-      var pagesUrl = (repo.toLowerCase() === (owner.toLowerCase() + '.github.io'))
-        ? 'https://' + owner + '.github.io/' + path
-        : 'https://' + owner + '.github.io/' + repo + '/' + path;
+      var stored = extractStoredFile(result.json);
+      var link = stored ? stored.file_url : extractLinkFromResponse(result.json);
+      el('b44Result').style.display = 'block';
 
-      state.videoLink = rawUrl;
-      el('videoLinkInput').value = rawUrl;
-
-      el('ghMeta').innerHTML =
-        '<span><b>Raw link</b> ' + rawUrl + '</span>' +
-        '<span><b>Pages link</b> ' + pagesUrl + ' (may take a minute to build)</span>';
-      el('ghResult').style.display = 'block';
-      el('ghUploadBtn').disabled = false;
-      clearBanner(gBanner);
-      startCountdown();
+      if (link){
+        state.videoLink = link;
+        el('videoLinkInput').value = link;
+        var metaBits = ['<span><b>Link</b> ' + link + '</span>'];
+        if (stored){
+          if (stored.name) metaBits.push('<span><b>Name</b> ' + stored.name + '</span>');
+          if (typeof stored.file_size === 'number') metaBits.push('<span><b>Size</b> ' + formatBytes(stored.file_size) + '</span>');
+          if (stored.id) metaBits.push('<span><b>ID</b> ' + stored.id + '</span>');
+        }
+        el('b44Meta').innerHTML = metaBits.join('');
+        el('b44RawWrap').style.display = 'none';
+        banner(bBanner, 'ok', 'Uploaded — link filled in below.');
+      } else {
+        el('b44Meta').innerHTML = '<span>Uploaded, but couldn\'t find a URL field in the response automatically.</span>';
+        el('b44Raw').value = result.raw;
+        el('b44RawWrap').style.display = 'block';
+        banner(bBanner, 'warn', 'Uploaded. Check the raw response below and paste the file link into the field beneath this panel yourself.');
+      }
     }).catch(function(err){
-      el('ghUploadBtn').disabled = false;
-      banner(gBanner, 'err', 'Upload failed: ' + err.message);
-    });
-  });
-
-  el('ghKeepBtn').addEventListener('click', function(){
-    stopCountdown();
-    el('ghCountdownLabel').textContent = 'Kept — will not auto-delete. Remove it from the repo manually when you\'re done.';
-  });
-
-  el('ghDeleteNowBtn').addEventListener('click', function(){
-    stopCountdown();
-    banner(el('ghBanner'), 'ok', 'Deleting…');
-    deleteGhFile().then(function(){
-      banner(el('ghBanner'), 'ok', 'Deleted from the repo.');
-      el('ghResult').style.display = 'none';
-    }).catch(function(err){
-      banner(el('ghBanner'), 'err', 'Delete failed: ' + err.message);
+      el('b44UploadBtn').disabled = false;
+      banner(bBanner, 'err', 'Upload failed: ' + err.message);
     });
   });
 
