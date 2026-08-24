@@ -36,22 +36,34 @@ class ReelCutterApp:
             style.theme_use("clam")
         except tk.TclError:
             pass
+        self.colors = {
+            "bg": "#14161a", "surface": "#1c1f24", "surface2": "#23272e",
+            "line": "#33383f", "text": "#eceef0", "dim": "#9aa1ab",
+            "accent": "#00d9b8", "coral": "#ff4d6d"
+        }
+        self.root.configure(background=self.colors["bg"])
+        style.configure("TFrame", background=self.colors["bg"])
+        style.configure("TLabel", background=self.colors["bg"], foreground=self.colors["text"], font=("Segoe UI", 10))
+        style.configure("TLabelframe", background=self.colors["bg"], foreground=self.colors["accent"], bordercolor=self.colors["line"])
+        style.configure("TLabelframe.Label", background=self.colors["bg"], foreground=self.colors["accent"], font=("Segoe UI", 10, "bold"))
+        style.configure("TButton", background=self.colors["surface2"], foreground=self.colors["text"], bordercolor=self.colors["line"], padding=(12, 8))
+        style.map("TButton", background=[("active", self.colors["line"])])
+        style.configure("TCombobox", fieldbackground="#101215", background=self.colors["surface2"], foreground=self.colors["text"])
+        style.configure("Horizontal.TProgressbar", troughcolor=self.colors["surface"], background=self.colors["accent"])
 
-        root_frame = ttk.Frame(self.root, padding=22)
+        root_frame = ttk.Frame(self.root, padding=(32, 18, 32, 24))
         root_frame.pack(fill="both", expand=True)
         root_frame.columnconfigure(0, weight=1)
-        root_frame.rowconfigure(3, weight=1)
+        root_frame.rowconfigure(5, weight=1)
+        root_frame.rowconfigure(6, weight=1)
 
-        ttk.Label(root_frame, text="REEL CUTTER", font=("Segoe UI", 24, "bold")).grid(
-            row=0, column=0, sticky="w"
-        )
-        ttk.Label(
-            root_frame,
-            text="Local video compression and large-file splitting powered by native FFmpeg",
-        ).grid(row=1, column=0, sticky="w", pady=(2, 18))
+        tk.Frame(root_frame, height=12, bg="#000000").grid(row=0, column=0, sticky="ew", pady=(0, 28))
+        tk.Label(root_frame, text="●  LOCAL & IN-BROWSER · NATIVE DESKTOP POWER", bg=self.colors["bg"], fg=self.colors["accent"], font=("Consolas", 9, "bold")).grid(row=1, column=0, sticky="w")
+        tk.Label(root_frame, text="Cut the boring parts.\nKeep the hook.", bg=self.colors["bg"], fg=self.colors["text"], justify="left", font=("Arial", 31, "bold")).grid(row=2, column=0, sticky="w", pady=(8, 4))
+        tk.Label(root_frame, text="Upload a long-form video, generate an AI editing plan, and render real vertical shorts locally with native FFmpeg.", bg=self.colors["bg"], fg=self.colors["dim"], wraplength=760, justify="left", font=("Segoe UI", 11)).grid(row=3, column=0, sticky="w", pady=(0, 22))
 
-        file_frame = ttk.LabelFrame(root_frame, text="Source video", padding=14)
-        file_frame.grid(row=2, column=0, sticky="ew")
+        file_frame = ttk.LabelFrame(root_frame, text="01  UPLOAD", padding=14)
+        file_frame.grid(row=4, column=0, sticky="ew")
         file_frame.columnconfigure(1, weight=1)
         ttk.Button(file_frame, text="Choose video", command=self.choose_video).grid(row=0, column=0, padx=(0, 10))
         self.file_label = ttk.Label(file_frame, text="No video selected", anchor="w")
@@ -59,10 +71,10 @@ class ReelCutterApp:
         self.info_label = ttk.Label(file_frame, text="", foreground="#666")
         self.info_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(10, 0))
 
-        work_frame = ttk.LabelFrame(root_frame, text="Compression", padding=14)
-        work_frame.grid(row=3, column=0, sticky="nsew", pady=(16, 0))
+        work_frame = ttk.LabelFrame(root_frame, text="02  SHRINK", padding=14)
+        work_frame.grid(row=5, column=0, sticky="nsew", pady=(16, 0))
         work_frame.columnconfigure(1, weight=1)
-        work_frame.rowconfigure(4, weight=1)
+        work_frame.rowconfigure(5, weight=1)
 
         ttk.Label(work_frame, text="Output size").grid(row=0, column=0, sticky="w", padx=(0, 10))
         self.height_var = tk.StringVar(value="720p")
@@ -91,10 +103,10 @@ class ReelCutterApp:
         self.output_text = tk.Text(work_frame, height=8, state="disabled", wrap="word", background="#f5f5f5")
         self.output_text.grid(row=5, column=0, columnspan=2, sticky="nsew", pady=(12, 0))
 
-        ai_frame = ttk.LabelFrame(root_frame, text="AI editing plan and render", padding=14)
-        ai_frame.grid(row=5, column=0, sticky="nsew", pady=(16, 0))
+        ai_frame = ttk.LabelFrame(root_frame, text="03  TARGET AI / TEMPLATE / PROMPT / RESPONSE / RENDER", padding=14)
+        ai_frame.grid(row=6, column=0, sticky="nsew", pady=(16, 0))
         ai_frame.columnconfigure(1, weight=1)
-        ai_frame.rowconfigure(3, weight=1)
+        ai_frame.rowconfigure(4, weight=1)
         ttk.Label(ai_frame, text="AI model").grid(row=0, column=0, sticky="w", padx=(0, 10))
         self.model_var = tk.StringVar(value="ChatGPT")
         ttk.Combobox(ai_frame, textvariable=self.model_var, values=["ChatGPT", "Claude", "Gemini", "Grok", "Other model"], state="readonly", width=18).grid(row=0, column=1, sticky="w")
@@ -116,8 +128,8 @@ class ReelCutterApp:
         ttk.Label(
             root_frame,
             text="Everything runs on this computer. Files are never uploaded by this app.",
-            foreground="#666",
-        ).grid(row=4, column=0, sticky="w", pady=(14, 0))
+            foreground=self.colors["dim"],
+        ).grid(row=7, column=0, sticky="w", pady=(14, 0))
 
     def choose_video(self):
         selected = filedialog.askopenfilename(
