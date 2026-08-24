@@ -1225,7 +1225,30 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       var cropX = (srcW - cropW) / 2, cropY = (srcH - cropH) / 2;
 
       var stream = canvas.captureStream(30);
-      var recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5_000_000 });
+      var audioContext = null;
+      var audioSource = null;
+      var audioDestination = null;
+      var sourceStream = (sourceVideo.captureStream || sourceVideo.mozCaptureStream);
+      if (sourceStream && window.AudioContext){
+        audioContext = new AudioContext();
+        var capturedAudio = sourceStream.call(sourceVideo);
+        if (capturedAudio.getAudioTracks().length){
+          audioSource = audioContext.createMediaStreamSource(capturedAudio);
+          audioDestination = audioContext.createMediaStreamDestination();
+          audioSource.connect(audioDestination);
+          audioDestination.stream.getAudioTracks().forEach(function(track){ stream.addTrack(track); });
+          if (state.playAudio) audioSource.connect(audioContext.destination);
+        }
+      }
+      var recorder;
+      try {
+        recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5_000_000 });
+      } catch (err){
+        stream.getTracks().forEach(function(track){ track.stop(); });
+        if (audioContext) audioContext.close();
+        reject(err);
+        return;
+      }
       var chunks = [];
       recorder.ondataavailable = function(e){ if (e.data.size > 0) chunks.push(e.data); };
 
@@ -1242,9 +1265,15 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
 
       recorder.onstop = function(){
         var blob = new Blob(chunks, { type: 'video/webm' });
+        stream.getTracks().forEach(function(track){ track.stop(); });
+        if (audioContext) audioContext.close();
         resolve(blob);
       };
-      recorder.onerror = function(e){ reject(e.error || new Error('Recording failed.')); };
+      recorder.onerror = function(e){
+        stream.getTracks().forEach(function(track){ track.stop(); });
+        if (audioContext) audioContext.close();
+        reject(e.error || new Error('Recording failed.'));
+      };
 
       function drawFrame(){
         var elapsed = sourceVideo.currentTime - clip.start;
@@ -1282,7 +1311,8 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       sourceVideo.onseeked = function(){
         sourceVideo.onseeked = null;
         recorder.start();
-        sourceVideo.play().then(function(){
+        var audioReady = audioContext ? audioContext.resume() : Promise.resolve();
+        audioReady.then(function(){ return sourceVideo.play(); }).then(function(){
           requestAnimationFrame(drawFrame);
         }).catch(reject);
       };
@@ -1362,7 +1392,8 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     renderVideo.src = state.videoEl.src;
     renderVideo.crossOrigin = 'anonymous';
     renderVideo.playsInline = true;
-    renderVideo.muted = !state.playAudio;
+    renderVideo.muted = false;
+    renderVideo.volume = 0;
     renderVideo.style.display = 'none';
     document.body.appendChild(renderVideo);
 
