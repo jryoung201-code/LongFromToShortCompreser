@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reel Cutter — Video to Shorts Prompt Studio</title>
+<style>
+  :root{
+    --bg: #14161a;
+    --surface: #1c1f24;
+    --surface-2: #23272e;
+    --line: #33383f;
+    --text: #eceef0;
+    --text-dim: #9aa1ab;
+    --accent: #00d9b8;
+    --accent-dim: #0a4a42;
+    --rec: #ff4d6d;
+    --warn: #f5c518;
+    --mono: 'IBM Plex Mono', 'SFMono-Regular', Menlo, monospace;
+    --display: 'Bebas Neue', 'Oswald', sans-serif;
+    --body: 'Inter', -apple-system, sans-serif;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--body); }
+  @font-face { font-family:'Bebas Neue'; src: local('Bebas Neue'); }
+
+  body{ padding: 0 0 80px; }
+
+  .filmstrip{
+    height: 22px;
+    background: repeating-linear-gradient(90deg, #000 0 14px, var(--bg) 14px 16px);
+    border-bottom: 1px solid var(--line);
+    opacity: .5;
+  }
+  header.hero{
+    padding: 48px 32px 32px;
+    max-width: 980px;
+    margin: 0 auto;
+  }
+  .eyebrow{
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .18em;
+    color: var(--accent);
+    text-transform: uppercase;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .eyebrow::before{
+    content:"";
+    width:8px; height:8px; border-radius:50%;
+    background: var(--rec);
+    box-shadow: 0 0 8px var(--rec);
+  }
+  h1{
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: clamp(40px, 7vw, 72px);
+    letter-spacing: .01em;
+    line-height: .95;
+    margin: 10px 0 14px;
+  }
+  h1 span{ color: var(--accent); }
+  .sub{ color: var(--text-dim); max-width: 640px; font-size: 16px; line-height: 1.55; }
+
+  main{ max-width: 980px; margin: 0 auto; padding: 0 32px; }
+
+  .step{
+    border-top: 1px solid var(--line);
+    padding: 40px 0;
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    gap: 24px;
+  }
+  .step-num{
+    font-family: var(--mono);
+    color: var(--text-dim);
+    font-size: 13px;
+    padding-top: 4px;
+  }
+  .step-num b{
+    display:block;
+    font-family: var(--display);
+    font-size: 34px;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .step h2{
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 26px;
+    letter-spacing: .01em;
+    margin: 0 0 6px;
+  }
+  .step p.desc{ color: var(--text-dim); font-size: 14px; margin: 0 0 20px; max-width: 620px; }
+
+  .dropzone{
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    padding: 28px;
+    text-align: center;
+    cursor: pointer;
+    background: var(--surface);
+    transition: border-color .15s, background .15s;
+  }
+  .dropzone:hover, .dropzone.drag{ border-color: var(--accent); background: var(--surface-2); }
+  .dropzone input{ display:none; }
+  .dropzone .hint{ color: var(--text-dim); font-size: 13px; margin-top: 6px; }
+
+  .video-meta{
+    display:flex; flex-wrap: wrap; gap: 10px 22px;
+    margin-top: 16px; font-family: var(--mono); font-size: 12px; color: var(--text-dim);
+  }
+  .video-meta b{ color: var(--text); }
+
+  video{ width: 100%; border-radius: var(--radius); background:#000; margin-top: 16px; display:block; }
+
+  .model-grid{
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 12px;
+  }
+  .model-card{
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+    cursor: pointer;
+    position: relative;
+  }
+  .model-card:hover{ border-color: var(--text-dim); }
+  .model-card.selected{ border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .model-card .name{ font-weight: 600; font-size: 15px; }
+  .model-card .tag{ font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-top: 4px; display:block; }
+
+  textarea, input[type=text], input[type=password], select{
+    width: 100%;
+    background: #101215;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    padding: 14px;
+    resize: vertical;
+    line-height: 1.6;
+  }
+  textarea:focus, input:focus, select:focus{ outline: 2px solid var(--accent); outline-offset: 1px; }
+  label.field-label{ display:block; font-size: 12px; color: var(--text-dim); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .06em; }
+
+  .gh-panel{
+    margin-top: 20px;
+    padding: 18px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  button{
+    font-family: var(--body);
+    font-weight: 600;
+    font-size: 14px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    padding: 11px 20px;
+    cursor: pointer;
+    transition: transform .1s, opacity .1s;
+  }
+  button:active{ transform: scale(.98); }
+  button:disabled{ opacity: .4; cursor: not-allowed; }
+  .btn-primary{ background: var(--accent); color: #06201c; text-decoration: none; display: inline-block; text-align: center; }
+  .btn-primary:hover:not(:disabled){ opacity:.9; }
+  .btn-ghost{ background: transparent; border-color: var(--line); color: var(--text); }
+  .btn-ghost:hover:not(:disabled){ border-color: var(--text-dim); }
+  .btn-row{ display:flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+
+  .progress-label{ font-family: var(--mono); font-size: 12px; color: var(--text-dim); display:flex; justify-content:space-between; margin-top: 10px; }
+
+  .audio-toggle{
+    display:flex; align-items:center; gap:8px; margin-top:14px; font-size:13px; color:var(--text-dim); cursor:pointer;
+  }
+  .audio-toggle input{ width:15px; height:15px; accent-color: var(--accent); }
+
+  .live-preview-wrap{ margin-top: 18px; max-width: 220px; }
+  .live-preview-wrap canvas{
+    width:100%; display:block; border-radius: var(--radius); border: 1px solid var(--line); background:#000;
+    aspect-ratio: 9/16;
+  }
+
+  .results-grid{
+    display:grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap: 18px; margin-top: 18px;
+  }
+  .short-card{
+    background: var(--surface); border:1px solid var(--line); border-radius: var(--radius); overflow:hidden;
+  }
+  .short-card video{ margin:0; border-radius:0; aspect-ratio: 9/16; object-fit: cover; }
+  .short-card .meta{ padding: 12px; }
+  .short-card .dl{ display:block; text-align:center; margin: 10px 12px 12px; padding: 8px; }
+
+  .banner{
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    font-size: 13px;
+    margin-top: 14px;
+    border: 1px solid;
+  }
+  .banner.err{ background: rgba(255,77,109,.08); border-color: var(--rec); color: #ffb3c1; }
+  .banner.ok{ background: rgba(0,217,184,.08); border-color: var(--accent); color: #9df3e6; }
+
+  footer{ text-align:center; color: var(--text-dim); font-size: 12px; padding: 40px 0 10px; font-family: var(--mono); }
+
+  @media (max-width: 640px){
+    .step{ grid-template-columns: 1fr; }
+    .step-num{ display:flex; align-items:baseline; gap:8px; }
+    .step-num b{ margin-bottom:0; font-size:22px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="filmstrip"></div>
+
+<header class="hero">
+  <div class="eyebrow">Local &amp; in-browser · zero memory limits</div>
+  <h1>Cut the <span>boring</span> parts.<br>Keep the <span>hook</span>.</h1>
+  <p class="sub">Upload a long-form video, generate a prompt tuned for your AI model, paste back its editing plan, and render real vertical shorts right here.</p>
+</header>
+
+<div class="filmstrip"></div>
+
+<main>
+
+  <!-- STEP 1 — UPLOAD -->
+  <section class="step">
+    <div class="step-num"><b>01</b>Upload</div>
+    <div>
+      <h2>Load your source video</h2>
+      <p class="desc">Stays strictly local. Handles multi-gigabyte files (5GB+) via native hardware decoding.</p>
+
+      <div class="dropzone" id="dropzone">
+        <div><strong>Click to choose a video</strong> or drag one here</div>
+        <div class="hint">MP4, WebM, MOV, MKV</div>
+        <input type="file" id="fileInput" accept="video/*">
+      </div>
+
+      <div id="videoMetaWrap" style="display:none;">
+        <video id="preview" controls></video>
+        <div class="video-meta" id="videoMeta"></div>
+      </div>
+      <div id="uploadBanner"></div>
+    </div>
+  </section>
+
+  <!-- STEP 2 — HARDWARE STREAM COMPRESSION -->
+  <section class="step">
+    <div class="step-num"><b>02</b>Shrink</div>
+    <div>
+      <h2>Hardware-Accelerated Compression</h2>
+      <p class="desc">Encodes directly via GPU stream pipelines without hitting memory caps.</p>
+
+      <div class="btn-row">
+        <select id="compressPreset" disabled style="width: auto;">
+          <option value="480">480p — Compact (3.0 Mbps)</option>
+          <option value="720" selected>720p — Balanced High Quality (6.0 Mbps)</option>
+          <option value="1080">1080p — Crisp Ultra (12.0 Mbps)</option>
+        </select>
+        <button class="btn-primary" id="compressBtn" type="button" disabled>Compress in browser</button>
+      </div>
+
+      <div id="compressProgressWrap" style="display:none;">
+        <div class="progress-label"><span id="compressLabel">Streaming &amp; Encoding…</span><span id="compressPct">0%</span></div>
+      </div>
+
+      <div id="compressBanner"></div>
+
+      <div id="compressResult" style="display:none;">
+        <video id="compressedPreview" controls></video>
+        <div class="video-meta" id="compressedMeta"></div>
+        <a class="btn-primary dl" id="compressedDownload" download>Download compressed file</a>
+      </div>
+
+      <div class="gh-panel">
+        <label class="field-label">Push to Base44 File Store</label>
+        <input type="text" id="b44Endpoint" placeholder="Endpoint URL" value="https://bizarre-omni-vault-drive.base44.app/api/apps/6a8c2a0a0918273d8c60b97b/functions/fileApi">
+        <input type="password" id="b44Key" placeholder="x-api-key" style="margin-top:8px;">
+
+        <div class="btn-row">
+          <button class="btn-primary" id="b44UploadBtn" type="button" disabled>Upload compressed file to Base44</button>
+        </div>
+
+        <div id="b44Banner"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 3 — MODEL -->
+  <section class="step">
+    <div class="step-num"><b>03</b>Target AI</div>
+    <div>
+      <h2>Target AI Model</h2>
+      <div class="model-grid" id="modelGrid"></div>
+    </div>
+  </section>
+
+  <!-- STEP 4 — TEMPLATE -->
+  <section class="step">
+    <div class="step-num"><b>04</b>Template</div>
+    <div>
+      <h2>Editing Template</h2>
+      <textarea id="templateInput" rows="12" spellcheck="false"></textarea>
+      <div class="btn-row">
+        <button class="btn-ghost" id="resetTemplateBtn" type="button">Reset template</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 5 — PROMPT -->
+  <section class="step">
+    <div class="step-num"><b>05</b>Prompt</div>
+    <div>
+      <h2>Generated Prompt</h2>
+      <div class="btn-row">
+        <button class="btn-primary" id="generatePromptBtn" type="button">Generate prompt</button>
+        <button class="btn-ghost" id="copyPromptBtn" type="button" disabled>Copy prompt</button>
+      </div>
+      <textarea id="promptOutput" rows="14" spellcheck="false" readonly style="margin-top:14px;"></textarea>
+    </div>
+  </section>
+
+  <!-- STEP 6 — RESPONSE -->
+  <section class="step">
+    <div class="step-num"><b>06</b>Response</div>
+    <div>
+      <h2>Paste AI Response</h2>
+      <textarea id="responseInput" rows="12" spellcheck="false" placeholder="Paste full reply here..."></textarea>
+      <div class="btn-row">
+        <button class="btn-primary" id="parseBtn" type="button">Parse plan</button>
+      </div>
+      <div id="parseBanner"></div>
+    </div>
+  </section>
+
+  <!-- STEP 7 — RENDER -->
+  <section class="step">
+    <div class="step-num"><b>07</b>Render</div>
+    <div>
+      <h2>Render Short Clips</h2>
+      <div class="btn-row">
+        <button class="btn-primary" id="renderBtn" type="button" disabled>Render shorts</button>
+      </div>
+
+      <label class="audio-toggle">
+        <input type="checkbox" id="audioToggle"> Play audio out loud while rendering
+      </label>
+
+      <div id="progressWrap" style="display:none;">
+        <div class="progress-label"><span id="progressLabel">Rendering clip with audio...</span><span id="progressPct">0%</span></div>
+        <div class="live-preview-wrap">
+          <canvas id="livePreviewCanvas"></canvas>
+        </div>
+      </div>
+
+      <div id="renderBanner"></div>
+      <div class="results-grid" id="results"></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>REEL CUTTER — pure browser power</footer>
+
+<script>
+(function(){
+  'use strict';
+
+  var MODELS = [
+    { key:'chatgpt', name:'ChatGPT', tag:'OpenAI', defaultVideo:true },
+    { key:'claude', name:'Claude', tag:'Anthropic', defaultVideo:true },
+    { key:'gemini', name:'Gemini', tag:'Google', defaultVideo:true },
+    { key:'grok', name:'Grok', tag:'xAI', defaultVideo:false }
+  ];
+
+  var DEFAULT_TEMPLATE = JSON.stringify([
+    {
+      "start": "00:00:05",
+      "end": "00:00:18",
+      "title": "Short title",
+      "hook": "Scroll stopping hook text",
+      "captions": ["Caption line 1", "Caption line 2"],
+      "aspectRatio": "9:16",
+      "effects": ["zoom-in"]
+    }
+  ], null, 2);
+
+  var state = {
+    file: null,
+    videoEl: document.getElementById('preview'),
+    duration: 0,
+    selectedModel: 'chatgpt',
+    parsedClips: null,
+    compressedBlob: null
+  };
+
+  function el(id){ return document.getElementById(id); }
+  function banner(container, type, msg){ container.innerHTML = '<div class="banner ' + type + '">' + msg + '</div>'; }
+  function clearBanner(container){ container.innerHTML = ''; }
+  function formatBytes(bytes){
+    if (!bytes) return '0 B';
+    var units = ['B','KB','MB','GB'];
+    var i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+  }
+  function formatDuration(sec){
+    if (!isFinite(sec)) return '—';
+    var h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = Math.floor(sec%60);
+    var pad = function(n){ return String(n).padStart(2,'0'); };
+    return h > 0 ? (h+':'+pad(m)+':'+pad(s)) : (pad(m)+':'+pad(s));
+  }
+
+  // --- File Selection ---
+  var dropzone = el('dropzone');
+  var fileInput = el('fileInput');
+  dropzone.addEventListener('click', function(){ fileInput.click(); });
+  fileInput.addEventListener('change', function(e){ if(e.target.files[0]) handleFile(e.target.files[0]); });
+
+  function handleFile(file){
+    state.file = file;
+    state.videoEl.src = URL.createObjectURL(file);
+    el('videoMetaWrap').style.display = 'block';
+    state.videoEl.onloadedmetadata = function(){
+      state.duration = state.videoEl.duration;
+      el('videoMeta').innerHTML =
+        '<span><b>Name</b> ' + file.name + '</span>' +
+        '<span><b>Size</b> ' + formatBytes(file.size) + '</span>' +
+        '<span><b>Duration</b> ' + formatDuration(state.duration) + '</span>' +
+        '<span><b>Native Res</b> ' + state.videoEl.videoWidth + '×' + state.videoEl.videoHeight + '</span>';
+      el('compressBtn').disabled = false;
+      el('compressPreset').disabled = false;
+      if (state.parsedClips) el('renderBtn').disabled = false;
+    };
+  }
+
+  // --- Local browser compressor ---
+  function compressNative(sourceVideo, targetHeight, bitrate, onProgress){
+    return new Promise(function(resolve, reject){
+      var canvas = document.createElement('canvas');
+      var ctx = canvas.getContext('2d');
+      if (!ctx || !canvas.captureStream || !window.MediaRecorder){
+        reject(new Error('This browser does not support local video compression. Try a recent Chrome, Edge, or Firefox.'));
+        return;
+      }
+      var scale = targetHeight / sourceVideo.videoHeight;
+      canvas.width = Math.round(sourceVideo.videoWidth * scale);
+      canvas.height = targetHeight;
+
+      var stream = canvas.captureStream(30);
+
+      // Attach audio track
+      if (sourceVideo.captureStream || sourceVideo.mozCaptureStream) {
+        var audioStream = (sourceVideo.captureStream || sourceVideo.mozCaptureStream).call(sourceVideo);
+        audioStream.getAudioTracks().forEach(function(track){ stream.addTrack(track); });
+      }
+
+      var mime = 'video/webm;codecs=vp9,opus';
+      if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
+
+      var recorder;
+      try {
+        recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate });
+      } catch (err){
+        stream.getTracks().forEach(function(track){ track.stop(); });
+        reject(new Error('This browser could not start local video compression: ' + err.message));
+        return;
+      }
+      var chunks = [];
+      var settled = false;
+      function stopTracks(){
+        stream.getTracks().forEach(function(track){ track.stop(); });
+        sourceVideo.muted = false;
+      }
+      recorder.ondataavailable = function(e){ if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = function(){
+        if (settled) return;
+        settled = true;
+        stopTracks();
+        resolve(new Blob(chunks, { type: 'video/webm' }));
+      };
+      recorder.onerror = function(e){
+        if (settled) return;
+        settled = true;
+        stopTracks();
+        reject(e.error || new Error('Stream compression failed.'));
+      };
+
+      sourceVideo.currentTime = 0;
+      sourceVideo.muted = true;
+
+      sourceVideo.onseeked = function(){
+        sourceVideo.onseeked = null;
+        recorder.start();
+        
+        var playPromise = sourceVideo.play();
+        if (playPromise !== undefined) {
+          playPromise.then(function() {
+            function step(){
+              if (sourceVideo.paused || sourceVideo.ended){
+                if (recorder.state !== 'inactive') recorder.stop();
+                return;
+              }
+              if (sourceVideo.readyState >= 2) {
+                ctx.drawImage(sourceVideo, 0, 0, canvas.width, canvas.height);
+              }
+              onProgress(sourceVideo.currentTime / sourceVideo.duration);
+              requestAnimationFrame(step);
+            }
+            step();
+          }).catch(function(err){
+            if (recorder.state !== 'inactive') recorder.stop();
+            if (!settled) {
+              settled = true;
+              stopTracks();
+              reject(err);
+            }
+          });
+        }
+      };
+    });
+  }
+
+  el('compressBtn').addEventListener('click', function(){
+    var targetH = parseInt(el('compressPreset').value, 10);
+    // Increased bitrates: 3Mbps, 6Mbps, 12Mbps
+    var bitrates = { 480: 3000000, 720: 6000000, 1080: 12000000 };
+    
+    clearBanner(el('compressBanner'));
+    el('compressBtn').disabled = true;
+    el('compressProgressWrap').style.display = 'block';
+
+    compressNative(state.videoEl, targetH, bitrates[targetH], function(pct){
+      el('compressPct').textContent = Math.round(pct * 100) + '%';
+    }).then(function(blob){
+      state.compressedBlob = blob;
+      el('compressProgressWrap').style.display = 'none';
+      el('compressBtn').disabled = false;
+      
+      var url = URL.createObjectURL(blob);
+      el('compressedPreview').src = url;
+      el('compressedMeta').innerHTML =
+        '<span><b>Original Size</b> ' + formatBytes(state.file.size) + '</span>' +
+        '<span><b>Compressed</b> ' + formatBytes(blob.size) + '</span>' +
+        '<span><b>Savings</b> ' + Math.round((1 - blob.size / state.file.size) * 100) + '%</span>';
+      
+      el('compressedDownload').href = url;
+      el('compressedDownload').download = 'compressed_' + targetH + 'p.webm';
+      el('compressResult').style.display = 'block';
+      el('b44UploadBtn').disabled = false;
+    }).catch(function(err){
+      el('compressProgressWrap').style.display = 'none';
+      el('compressBtn').disabled = false;
+      banner(el('compressBanner'), 'err', 'Compression error: ' + err.message);
+    });
+  });
+
+  // --- Setup Models ---
+  MODELS.forEach(function(m){
+    var card = document.createElement('div');
+    card.className = 'model-card' + (m.key === state.selectedModel ? ' selected' : '');
+    card.innerHTML = '<div class="name">' + m.name + '</div><span class="tag">' + m.tag + '</span>';
+    card.addEventListener('click', function(){
+      state.selectedModel = m.key;
+      document.querySelectorAll('.model-card').forEach(function(c){ c.classList.remove('selected'); });
+      card.classList.add('selected');
+    });
+    el('modelGrid').appendChild(card);
+  });
+
+  el('templateInput').value = DEFAULT_TEMPLATE;
+  el('resetTemplateBtn').addEventListener('click', function(){ el('templateInput').value = DEFAULT_TEMPLATE; });
+
+  // --- Generate Prompt ---
+  el('generatePromptBtn').addEventListener('click', function(){
+    var prompt = "Task: Analyze video '" + (state.file ? state.file.name : "upload") + "' (" + formatDuration(state.duration) + " long).\n\n" +
+      "Create high-engagement shorts editing plan in exact JSON:\n\n<Code>\n" + el('templateInput').value + "\n</Code>";
+    el('promptOutput').value = prompt;
+    el('copyPromptBtn').disabled = false;
+  });
+
+  el('copyPromptBtn').addEventListener('click', function(){
+    navigator.clipboard.writeText(el('promptOutput').value);
+  });
+
+  // --- Parse AI JSON Response ---
+  el('parseBtn').addEventListener('click', function(){
+    try {
+      var raw = el('responseInput').value;
+      var match = raw.match(/<Code>([\s\S]*?)<\/Code>/i);
+      var jsonStr = match ? match[1] : raw;
+      state.parsedClips = JSON.parse(jsonStr.trim());
+      banner(el('parseBanner'), 'ok', 'Successfully parsed ' + state.parsedClips.length + ' clip(s).');
+      if (state.file) el('renderBtn').disabled = false;
+    } catch(e) {
+      banner(el('parseBanner'), 'err', 'Invalid JSON response: ' + e.message);
+    }
+  });
+
+  // --- Render Clip Shorts ---
+  el('renderBtn').addEventListener('click', function(){
+    el('progressWrap').style.display = 'block';
+    el('results').innerHTML = '';
+
+    var clips = state.parsedClips;
+    var canvas = el('livePreviewCanvas');
+    var ctx = canvas.getContext('2d');
+    canvas.width = 360; canvas.height = 640;
+
+    var playAudible = el('audioToggle').checked;
+    state.videoEl.muted = !playAudible;
+
+    var index = 0;
+    function renderNext(){
+      if (index >= clips.length){
+        el('progressWrap').style.display = 'none';
+        state.videoEl.muted = false;
+        return;
+      }
+
+      var clip = clips[index];
+      var startSec = clip.start.split(':').reduce((acc, t) => (60 * acc) + +t, 0);
+      var endSec = clip.end.split(':').reduce((acc, t) => (60 * acc) + +t, 0);
+
+      var stream = canvas.captureStream(30);
+
+      if (state.videoEl.captureStream || state.videoEl.mozCaptureStream) {
+        var sourceStream = (state.videoEl.captureStream || state.videoEl.mozCaptureStream).call(state.videoEl);
+        sourceStream.getAudioTracks().forEach(function(track){
+          stream.addTrack(track);
+        });
+      }
+
+      var mime = 'video/webm;codecs=vp9,opus';
+      if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
+
+      var recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6000000 });
+      var chunks = [];
+      recorder.ondataavailable = function(e){ if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = function(){
+        var blob = new Blob(chunks, { type: 'video/webm' });
+        var url = URL.createObjectURL(blob);
+        var card = document.createElement('div');
+        card.className = 'short-card';
+        card.innerHTML = 
+          '<video src="' + url + '" controls></video>' +
+          '<div class="meta"><b>' + (clip.title || 'Short #' + (index+1)) + '</b></div>' +
+          '<a class="btn-primary dl" href="' + url + '" download="short_' + (index+1) + '.webm">Download Short</a>';
+        el('results').appendChild(card);
+        index++;
+        renderNext();
+      };
+
+      state.videoEl.currentTime = startSec;
+      state.videoEl.onseeked = function(){
+        state.videoEl.onseeked = null;
+        recorder.start();
+        state.videoEl.play();
+
+        function draw(){
+          if (state.videoEl.currentTime >= endSec || state.videoEl.paused){
+            state.videoEl.pause();
+            recorder.stop();
+            return;
+          }
+          if (state.videoEl.readyState >= 2) {
+            ctx.drawImage(state.videoEl, 0, 0, canvas.width, canvas.height);
+          }
+          requestAnimationFrame(draw);
+        }
+        draw();
+      };
+    }
+    renderNext();
+  });
+
+})();
+</script>
+</body>
+</html>

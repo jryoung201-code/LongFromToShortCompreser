@@ -12,10 +12,10 @@
     --line: #33383f;
     --text: #eceef0;
     --text-dim: #9aa1ab;
-    --accent: #00d9b8;
+    --accent: #00d9b8;      /* playback teal — signature color */
     --accent-dim: #0a4a42;
-    --rec: #ff4d6d;
-    --warn: #f5c518;
+    --rec: #ff4d6d;         /* record-light red for warnings/live states */
+    --warn: #f5c518;        /* slate-yellow for caution */
     --mono: 'IBM Plex Mono', 'SFMono-Regular', Menlo, monospace;
     --display: 'Bebas Neue', 'Oswald', sans-serif;
     --body: 'Inter', -apple-system, sans-serif;
@@ -27,6 +27,7 @@
 
   body{ padding: 0 0 80px; }
 
+  /* ---------- Header / film-strip motif ---------- */
   .filmstrip{
     height: 22px;
     background: repeating-linear-gradient(90deg, #000 0 14px, var(--bg) 14px 16px);
@@ -67,6 +68,7 @@
 
   main{ max-width: 980px; margin: 0 auto; padding: 0 32px; }
 
+  /* ---------- Step scaffold: this really is a sequential process, so numbering is meaningful ---------- */
   .step{
     border-top: 1px solid var(--line);
     padding: 40px 0;
@@ -97,6 +99,7 @@
   }
   .step p.desc{ color: var(--text-dim); font-size: 14px; margin: 0 0 20px; max-width: 620px; }
 
+  /* ---------- Upload zone ---------- */
   .dropzone{
     border: 1px dashed var(--line);
     border-radius: var(--radius);
@@ -118,6 +121,7 @@
 
   video{ width: 100%; border-radius: var(--radius); background:#000; margin-top: 16px; display:block; }
 
+  /* ---------- Model cards ---------- */
   .model-grid{
     display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 12px;
   }
@@ -133,8 +137,12 @@
   .model-card.selected{ border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
   .model-card .name{ font-weight: 600; font-size: 15px; }
   .model-card .tag{ font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-top: 4px; display:block; }
+  .model-card label.toggle{
+    display:flex; align-items:center; gap:6px; margin-top: 12px; font-size: 12px; color: var(--text-dim);
+  }
 
-  textarea, input[type=text], input[type=password], select{
+  /* ---------- Form elements ---------- */
+  textarea, input[type=text]{
     width: 100%;
     background: #101215;
     border: 1px solid var(--line);
@@ -146,7 +154,7 @@
     resize: vertical;
     line-height: 1.6;
   }
-  textarea:focus, input:focus, select:focus{ outline: 2px solid var(--accent); outline-offset: 1px; }
+  textarea:focus, input:focus{ outline: 2px solid var(--accent); outline-offset: 1px; }
   label.field-label{ display:block; font-size: 12px; color: var(--text-dim); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .06em; }
 
   .gh-panel{
@@ -156,6 +164,7 @@
     border-radius: var(--radius);
     background: var(--surface);
   }
+  .gh-panel input{ margin-top: 0; }
 
   button{
     font-family: var(--body);
@@ -169,25 +178,62 @@
   }
   button:active{ transform: scale(.98); }
   button:disabled{ opacity: .4; cursor: not-allowed; }
-  .btn-primary{ background: var(--accent); color: #06201c; text-decoration: none; display: inline-block; text-align: center; }
+  .btn-primary{ background: var(--accent); color: #06201c; }
   .btn-primary:hover:not(:disabled){ opacity:.9; }
   .btn-ghost{ background: transparent; border-color: var(--line); color: var(--text); }
   .btn-ghost:hover:not(:disabled){ border-color: var(--text-dim); }
   .btn-row{ display:flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 
-  .progress-label{ font-family: var(--mono); font-size: 12px; color: var(--text-dim); display:flex; justify-content:space-between; margin-top: 10px; }
+  /* ---------- Progress / timeline ruler (signature element) ---------- */
+  .timeline-ruler{
+    height: 26px;
+    display:flex;
+    align-items:flex-end;
+    gap: 2px;
+    margin: 18px 0 6px;
+  }
+  .tick{ flex:1; background: var(--line); height: 6px; border-radius: 1px; }
+  .tick.on{ background: var(--accent); height: 18px; }
+  .progress-label{ font-family: var(--mono); font-size: 12px; color: var(--text-dim); display:flex; justify-content:space-between; }
 
   .audio-toggle{
     display:flex; align-items:center; gap:8px; margin-top:14px; font-size:13px; color:var(--text-dim); cursor:pointer;
   }
   .audio-toggle input{ width:15px; height:15px; accent-color: var(--accent); }
 
+  /* Clip timeline: shows where each clip sits in the full source video, with a live playhead */
+  .clip-timeline{
+    position: relative;
+    height: 34px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-top: 18px;
+  }
+  .clip-timeline .segment{
+    position:absolute; top:5px; bottom:5px;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    transition: background .15s;
+  }
+  .clip-timeline .segment.active{ background: var(--accent); }
+  .clip-timeline .segment.done{ background: #2a4a45; border-color: #2a4a45; }
+  .clip-timeline .playhead{
+    position:absolute; top:0; bottom:0; width:2px; background: var(--rec); left:0;
+    box-shadow: 0 0 6px var(--rec);
+    transition: left .05s linear;
+  }
+
   .live-preview-wrap{ margin-top: 18px; max-width: 220px; }
   .live-preview-wrap canvas{
     width:100%; display:block; border-radius: var(--radius); border: 1px solid var(--line); background:#000;
     aspect-ratio: 9/16;
   }
+  .live-preview-caption{ font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); margin-top: 6px; text-align:center; }
 
+  /* ---------- Results ---------- */
   .results-grid{
     display:grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap: 18px; margin-top: 18px;
   }
@@ -196,6 +242,8 @@
   }
   .short-card video{ margin:0; border-radius:0; aspect-ratio: 9/16; object-fit: cover; }
   .short-card .meta{ padding: 12px; }
+  .short-card .title{ font-weight:600; font-size: 13px; margin-bottom:4px; }
+  .short-card .time{ font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
   .short-card .dl{ display:block; text-align:center; margin: 10px 12px 12px; padding: 8px; }
 
   .banner{
@@ -206,7 +254,10 @@
     border: 1px solid;
   }
   .banner.err{ background: rgba(255,77,109,.08); border-color: var(--rec); color: #ffb3c1; }
+  .banner.warn{ background: rgba(245,197,24,.08); border-color: var(--warn); color: #f5dc8f; }
   .banner.ok{ background: rgba(0,217,184,.08); border-color: var(--accent); color: #9df3e6; }
+
+  code.inline{ font-family: var(--mono); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 
   footer{ text-align:center; color: var(--text-dim); font-size: 12px; padding: 40px 0 10px; font-family: var(--mono); }
 
@@ -222,9 +273,9 @@
 <div class="filmstrip"></div>
 
 <header class="hero">
-  <div class="eyebrow">Local &amp; in-browser · zero memory limits</div>
+  <div class="eyebrow">Local &amp; in-browser · nothing uploaded to a server</div>
   <h1>Cut the <span>boring</span> parts.<br>Keep the <span>hook</span>.</h1>
-  <p class="sub">Upload a long-form video, generate a prompt tuned for your AI model, paste back its editing plan, and render real vertical shorts right here.</p>
+  <p class="sub">Upload a long-form video, generate a prompt tuned for the AI model of your choice, paste back its editing plan, and render real vertical shorts — right here in your browser.</p>
 </header>
 
 <div class="filmstrip"></div>
@@ -236,11 +287,11 @@
     <div class="step-num"><b>01</b>Upload</div>
     <div>
       <h2>Load your source video</h2>
-      <p class="desc">Stays strictly local. Handles multi-gigabyte files (5GB+) via native hardware decoding.</p>
+      <p class="desc">Stays on your device. We only read it to show a preview and, later, to cut clips out of it.</p>
 
       <div class="dropzone" id="dropzone">
         <div><strong>Click to choose a video</strong> or drag one here</div>
-        <div class="hint">MP4, WebM, MOV, MKV</div>
+        <div class="hint">MP4, WebM, MOV (as supported by your browser)</div>
         <input type="file" id="fileInput" accept="video/*">
       </div>
 
@@ -252,24 +303,25 @@
     </div>
   </section>
 
-  <!-- STEP 2 — HARDWARE STREAM COMPRESSION -->
+  <!-- STEP 2 — COMPRESS & LINK -->
   <section class="step">
     <div class="step-num"><b>02</b>Shrink</div>
     <div>
-      <h2>Hardware-Accelerated Compression</h2>
-      <p class="desc">Encodes directly via GPU stream pipelines without hitting memory caps.</p>
+      <h2>Compress it, and/or link to it</h2>
+      <p class="desc">Most AI chat interfaces cap uploads (often 500MB or less). Compress the video down here, then either attach the smaller file directly, or upload it somewhere like a GitHub repo and paste the link below so the prompt can point to it instead.</p>
 
       <div class="btn-row">
-        <select id="compressPreset" disabled style="width: auto;">
-          <option value="480">480p — Compact (3.0 Mbps)</option>
-          <option value="720" selected>720p — Balanced High Quality (6.0 Mbps)</option>
-          <option value="1080">1080p — Crisp Ultra (12.0 Mbps)</option>
+        <select id="compressPreset" disabled>
+          <option value="480">480p — smallest file</option>
+          <option value="720" selected>720p — good balance</option>
+          <option value="1080">1080p — higher quality</option>
         </select>
-        <button class="btn-primary" id="compressBtn" type="button" disabled>Compress video natively</button>
+        <button class="btn-primary" id="compressBtn" type="button" disabled>Compress video</button>
       </div>
 
       <div id="compressProgressWrap" style="display:none;">
-        <div class="progress-label"><span id="compressLabel">Streaming &amp; Encoding…</span><span id="compressPct">0%</span></div>
+        <div class="progress-label"><span id="compressLabel">Compressing…</span><span id="compressPct">0%</span></div>
+        <div class="timeline-ruler" id="compressRuler"></div>
       </div>
 
       <div id="compressBanner"></div>
@@ -277,11 +329,13 @@
       <div id="compressResult" style="display:none;">
         <video id="compressedPreview" controls></video>
         <div class="video-meta" id="compressedMeta"></div>
-        <a class="btn-primary dl" id="compressedDownload" download>Download compressed file</a>
+        <a class="btn-primary dl" id="compressedDownload" download>Download compressed video</a>
       </div>
 
       <div class="gh-panel">
-        <label class="field-label">Push to Base44 File Store</label>
+        <label class="field-label">Push the compressed file to your Base44 file store</label>
+        <p class="desc">Uploads directly from your browser to your Base44 app's file API — nothing passes through any other server. The API key stays only in this tab's memory and is used solely for this upload call; it is never included in the generated prompt text.</p>
+
         <input type="text" id="b44Endpoint" placeholder="Endpoint URL" value="https://bizarre-omni-vault-drive.base44.app/api/apps/6a8c2a0a0918273d8c60b97b/functions/fileApi">
         <input type="password" id="b44Key" placeholder="x-api-key" style="margin-top:8px;">
 
@@ -290,74 +344,106 @@
         </div>
 
         <div id="b44Banner"></div>
+
+        <div id="b44Result" style="display:none;">
+          <div class="video-meta" id="b44Meta"></div>
+          <div id="b44RawWrap" style="display:none;">
+            <label class="field-label">Raw response (couldn't find a link field automatically — copy it from here)</label>
+            <textarea id="b44Raw" rows="6" readonly spellcheck="false"></textarea>
+          </div>
+        </div>
       </div>
+
+      <label class="field-label">Hosted video link (optional, filled automatically after a Base44 upload)</label>
+      <input type="text" id="videoLinkInput" placeholder="e.g. https://your-base44-app.base44.app/files/abc123.mp4">
+      <p class="desc" style="margin-top:8px;">You can also paste a link here yourself if you host the video some other way. The generated prompt will mention this link. Not every model can actually fetch a file from a URL, so it's worth still attaching the file directly wherever that's an option.</p>
     </div>
   </section>
 
-  <!-- STEP 3 — MODEL -->
+  <!-- STEP 3 — MODEL (renumbered) -->
   <section class="step">
     <div class="step-num"><b>03</b>Target AI</div>
     <div>
-      <h2>Target AI Model</h2>
+      <h2>Which AI model will analyze the video?</h2>
+      <p class="desc">Each model gets prompt wording suited to it. If a model can't take video directly in your current plan, we'll tell you what to do instead — toggle the box if your setup differs from the default.</p>
+
       <div class="model-grid" id="modelGrid"></div>
     </div>
   </section>
 
-  <!-- STEP 4 — TEMPLATE -->
+  <!-- STEP 3 — TEMPLATE -->
   <section class="step">
     <div class="step-num"><b>04</b>Template</div>
     <div>
-      <h2>Editing Template</h2>
-      <textarea id="templateInput" rows="12" spellcheck="false"></textarea>
+      <h2>Editing-output template</h2>
+      <p class="desc">This is the exact structure the AI must fill in. The default is a JSON list of clips — edit it if you want different fields, but keep it valid JSON so this app can read the response back.</p>
+
+      <textarea id="templateInput" rows="14" spellcheck="false"></textarea>
       <div class="btn-row">
-        <button class="btn-ghost" id="resetTemplateBtn" type="button">Reset template</button>
+        <button class="btn-ghost" id="resetTemplateBtn" type="button">Reset to default template</button>
       </div>
     </div>
   </section>
 
-  <!-- STEP 5 — PROMPT -->
+  <!-- STEP 4 — GENERATE PROMPT -->
   <section class="step">
     <div class="step-num"><b>05</b>Prompt</div>
     <div>
-      <h2>Generated Prompt</h2>
+      <h2>Generated prompt</h2>
+      <p class="desc">Copy this into the model you picked above (attach the video file too, if that model supports it).</p>
+
       <div class="btn-row">
         <button class="btn-primary" id="generatePromptBtn" type="button">Generate prompt</button>
         <button class="btn-ghost" id="copyPromptBtn" type="button" disabled>Copy prompt</button>
       </div>
-      <textarea id="promptOutput" rows="14" spellcheck="false" readonly style="margin-top:14px;"></textarea>
+      <textarea id="promptOutput" rows="16" spellcheck="false" readonly placeholder="Your generated prompt will appear here…" style="margin-top:14px;"></textarea>
+      <div id="promptBanner"></div>
     </div>
   </section>
 
-  <!-- STEP 6 — RESPONSE -->
+  <!-- STEP 5 — PASTE RESPONSE -->
   <section class="step">
     <div class="step-num"><b>06</b>Response</div>
     <div>
-      <h2>Paste AI Response</h2>
-      <textarea id="responseInput" rows="12" spellcheck="false" placeholder="Paste full reply here..."></textarea>
+      <h2>Paste the AI's editing plan</h2>
+      <p class="desc">Paste exactly what the model sent back, including the <code class="inline">&lt;Code&gt;…&lt;/Code&gt;</code> block. We'll pull the JSON out of it.</p>
+
+      <textarea id="responseInput" rows="14" spellcheck="false" placeholder="Paste the AI's full reply here…"></textarea>
       <div class="btn-row">
-        <button class="btn-primary" id="parseBtn" type="button">Parse plan</button>
+        <button class="btn-primary" id="parseBtn" type="button">Parse editing plan</button>
       </div>
       <div id="parseBanner"></div>
     </div>
   </section>
 
-  <!-- STEP 7 — RENDER -->
+  <!-- STEP 6 — RENDER -->
   <section class="step">
     <div class="step-num"><b>07</b>Render</div>
     <div>
-      <h2>Render Short Clips</h2>
+      <h2>Cut the shorts</h2>
+      <p class="desc">Renders happen locally using your browser's video decoder and recorder — no data leaves this page.</p>
+
       <div class="btn-row">
         <button class="btn-primary" id="renderBtn" type="button" disabled>Render shorts</button>
       </div>
 
       <label class="audio-toggle">
-        <input type="checkbox" id="audioToggle"> Play audio out loud while rendering
+        <input type="checkbox" id="audioToggle">
+        Play the audio out loud while rendering (it's silent by default — rendering still works either way)
       </label>
 
       <div id="progressWrap" style="display:none;">
-        <div class="progress-label"><span id="progressLabel">Rendering clip with audio...</span><span id="progressPct">0%</span></div>
+        <div class="progress-label"><span id="progressLabel">Preparing…</span><span id="progressPct">0%</span></div>
+        <div class="timeline-ruler" id="ruler"></div>
+
+        <div class="clip-timeline" id="clipTimeline">
+          <div class="playhead" id="playhead"></div>
+        </div>
+        <div class="progress-label" style="margin-top:4px;"><span>0:00</span><span id="timelineTotal">0:00</span></div>
+
         <div class="live-preview-wrap">
           <canvas id="livePreviewCanvas"></canvas>
+          <div class="live-preview-caption">Live — this is the actual frame being cut right now</div>
         </div>
       </div>
 
@@ -368,48 +454,180 @@
 
 </main>
 
-<footer>REEL CUTTER — pure browser power</footer>
+<footer>REEL CUTTER — runs entirely client-side</footer>
 
 <script>
 (function(){
   'use strict';
 
+  // ---------------------------------------------------------------------
+  // Model definitions
+  // ---------------------------------------------------------------------
   var MODELS = [
-    { key:'chatgpt', name:'ChatGPT', tag:'OpenAI', defaultVideo:true },
-    { key:'claude', name:'Claude', tag:'Anthropic', defaultVideo:true },
-    { key:'gemini', name:'Gemini', tag:'Google', defaultVideo:true },
-    { key:'grok', name:'Grok', tag:'xAI', defaultVideo:false }
+    {
+      key:'chatgpt', name:'ChatGPT', tag:'OpenAI', defaultVideo:true,
+      buildPrompt: function(ctx){
+        return (
+'You are editing raw footage into short-form clips for TikTok, YouTube Shorts, and Instagram Reels.\n\n' +
+'STEP 1 — Before anything else, watch the attached video and state its total duration back to me in HH:MM:SS. ' +
+'Every timestamp you give later must fall within that duration — if you\'re unsure of the exact length, say so rather than guessing.\n\n' +
+ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
+'STEP 2 — Go through the video roughly chronologically and list the candidate moments worth cutting into a Short. For each one, work through:\n' +
+'1. What happens in this moment and why it\'s worth watching\n' +
+'2. A precise start and end timestamp (double-check these against the real timeline, not estimated pacing)\n' +
+'3. A short, scroll-stopping title\n' +
+'4. A one-line hook for the first ~2 seconds\n' +
+'5. Caption/subtitle lines timed to the action\n' +
+'6. Best aspect ratio (usually 9:16)\n' +
+'7. Any zooms, cuts, or transitions worth applying\n\n' +
+'Suggest as many separate Shorts as the footage actually supports — don\'t force everything into one clip, and don\'t invent extra ones if the footage is short.\n\n' +
+'STEP 3 — Only after finishing that reasoning, output the final plan as JSON in exactly this shape, with no other code blocks anywhere in your reply:\n\n' +
+'<Code>\n' + ctx.template + '\n</Code>\n\n' +
+'The JSON inside that block is parsed automatically, so match the field names exactly and do not add commentary inside the tags.'
+        );
+      }
+    },
+    {
+      key:'claude', name:'Claude', tag:'Anthropic', defaultVideo:true,
+      buildPrompt: function(ctx){
+        return (
+'I need help turning a piece of raw footage into short-form clips for TikTok, YouTube Shorts, and Instagram Reels.\n\n' +
+ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
+'Before you plan anything, look at the video and confirm its actual total duration — this matters a lot, because timestamps that drift from the real length will make the final cuts unusable. If your estimate of the duration and the stated duration disagree, flag that explicitly rather than proceeding.\n\n' +
+'Then think through the footage and decide how it should be cut. For each candidate Short, reason about:\n' +
+'- Why this moment has strong hook/retention potential\n' +
+'- Exact start and end timestamps, grounded in the real timeline of the video\n' +
+'- A short, scroll-stopping title\n' +
+'- A one-line hook for the first couple of seconds\n' +
+'- Caption/subtitle lines paced to what\'s happening on screen\n' +
+'- The right aspect ratio (typically 9:16)\n' +
+'- Any zooms, cuts, or transitions that would help pacing\n\n' +
+'Feel free to suggest multiple Shorts if the footage supports it, and to say so if it only really supports one.\n\n' +
+'Once you\'ve reasoned through it, give me only the final plan as JSON, wrapped exactly like this — make it the only code block in your reply, with no other JSON or code elsewhere in the response:\n\n' +
+'<Code>\n' + ctx.template + '\n</Code>\n\n' +
+'Match the field names in that template exactly, since another part of this app parses it automatically.'
+        );
+      }
+    },
+    {
+      key:'gemini', name:'Gemini', tag:'Google', defaultVideo:true,
+      buildPrompt: function(ctx){
+        return (
+'Task: analyze the attached video frame-by-frame and produce a short-form editing plan for TikTok, YouTube Shorts, and Instagram Reels.\n\n' +
+ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
+'Ground every timestamp in specific visual moments you actually observe in the video — name what is happening on screen at each start/end point rather than estimating from pacing alone. First, state the video\'s total duration in HH:MM:SS based on what you observe, and make sure no clip timestamp exceeds it.\n\n' +
+'For each Short, provide:\n' +
+'- Start timestamp (HH:MM:SS), tied to a concrete visual event\n' +
+'- End timestamp (HH:MM:SS), tied to a concrete visual event\n' +
+'- Suggested title\n' +
+'- Hook line for the opening ~2 seconds\n' +
+'- Caption/subtitle lines\n' +
+'- Recommended aspect ratio (typically 9:16)\n' +
+'- Zooms, cuts, or transitions that fit the moment\n\n' +
+'List multiple Shorts if the footage has enough distinct high-interest moments; don\'t pad the list if it doesn\'t.\n\n' +
+'Output format: after your analysis, return only the final plan as JSON wrapped exactly like this, with no other code block in the response:\n\n' +
+'<Code>\n' + ctx.template + '\n</Code>\n\n' +
+'Keep the field names exactly as shown — this block is parsed automatically by another program.'
+        );
+      }
+    },
+    {
+      key:'grok', name:'Grok', tag:'xAI', defaultVideo:false,
+      buildPrompt: function(ctx){
+        return (
+'Turn this footage into short-form clips for TikTok, YouTube Shorts, and Instagram Reels.\n\n' +
+ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
+'Confirm the total video duration up front (HH:MM:SS) before giving any timestamps, and make sure every clip fits inside it.\n\n' +
+'For each Short, give me: start timestamp, end timestamp, a short punchy title, a one-line hook, a few caption lines, the aspect ratio (usually 9:16), and any cuts/zooms/transitions worth using. Suggest more than one Short if the footage supports it — keep it tight, no filler explanation.\n\n' +
+'End your reply with the plan as JSON only, wrapped exactly like this and nothing else inside the tags:\n\n' +
+'<Code>\n' + ctx.template + '\n</Code>\n\n' +
+'Keep the field names exactly as shown so it can be parsed automatically.'
+        );
+      }
+    },
+    {
+      key:'other', name:'Other model', tag:'Custom', defaultVideo:false,
+      buildPrompt: function(ctx){
+        return (
+'Please analyze the attached video and create an editing plan for turning it into short-form clips (TikTok, YouTube Shorts, Instagram Reels).\n\n' +
+ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
+'Important: before giving any timestamps, state the video\'s total duration in HH:MM:SS, and make sure every clip you suggest actually falls within that duration.\n\n' +
+'For each Short, include:\n' +
+'- Start timestamp\n' +
+'- End timestamp\n' +
+'- Suggested title\n' +
+'- A one-line hook for the first couple of seconds\n' +
+'- Caption/subtitle suggestions\n' +
+'- Recommended aspect ratio (typically 9:16)\n' +
+'- Any zooms, cuts, or transitions worth applying\n\n' +
+'Suggest multiple Shorts if the footage supports it.\n\n' +
+'After your analysis, output only the plan as JSON wrapped exactly like this, with no other code blocks in your reply:\n\n' +
+'<Code>\n' + ctx.template + '\n</Code>\n\n' +
+'Keep the field names exactly as shown — this is parsed automatically by another program.'
+        );
+      }
+    }
   ];
 
   var DEFAULT_TEMPLATE = JSON.stringify([
     {
       "start": "00:00:05",
       "end": "00:00:18",
-      "title": "Short title",
-      "hook": "Scroll stopping hook text",
-      "captions": ["Caption line 1", "Caption line 2"],
+      "title": "Short, punchy title for this clip",
+      "hook": "One line shown in the first ~2 seconds to stop the scroll",
+      "captions": [
+        "First caption line",
+        "Second caption line",
+        "Third caption line"
+      ],
       "aspectRatio": "9:16",
-      "effects": ["zoom-in"]
+      "effects": ["zoom-in", "cut"]
     }
   ], null, 2);
 
+  // ---------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------
   var state = {
     file: null,
     videoEl: document.getElementById('preview'),
     duration: 0,
     selectedModel: 'chatgpt',
     parsedClips: null,
-    compressedBlob: null
+    videoLink: '',
+    generatedShorts: [],
+    playAudio: false
   };
 
+  // ---------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------
   function el(id){ return document.getElementById(id); }
-  function banner(container, type, msg){ container.innerHTML = '<div class="banner ' + type + '">' + msg + '</div>'; }
+  function banner(container, type, msg){
+    container.innerHTML = '<div class="banner ' + type + '">' + msg + '</div>';
+  }
   function clearBanner(container){ container.innerHTML = ''; }
+
+  // Not every rejection is a proper Error (workers/wasm can reject with plain
+  // strings, event objects, or nothing at all) — this stops those from
+  // rendering as a bare "undefined" in the UI.
+  function errText(err){
+    if (!err) return 'Unknown error (no details were provided).';
+    if (typeof err === 'string') return err;
+    if (err.message) return err.message;
+    try {
+      var s = JSON.stringify(err);
+      return (s && s !== '{}') ? s : String(err);
+    } catch (e){
+      return String(err);
+    }
+  }
+
   function formatBytes(bytes){
     if (!bytes) return '0 B';
     var units = ['B','KB','MB','GB'];
     var i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+    return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
   }
   function formatDuration(sec){
     if (!isFinite(sec)) return '—';
@@ -418,241 +636,798 @@
     return h > 0 ? (h+':'+pad(m)+':'+pad(s)) : (pad(m)+':'+pad(s));
   }
 
-  // --- File Selection ---
+  // Accepts "HH:MM:SS", "MM:SS", "SS", or a bare number of seconds.
+  function timecodeToSeconds(tc){
+    if (typeof tc === 'number') return tc;
+    if (typeof tc !== 'string') return NaN;
+    var parts = tc.trim().split(':').map(function(p){ return parseFloat(p); });
+    if (parts.some(isNaN)) return NaN;
+    var sec = 0;
+    for (var i = 0; i < parts.length; i++){
+      sec = sec * 60 + parts[i];
+    }
+    return sec;
+  }
+
+  function parseAspectRatio(ar){
+    if (!ar || typeof ar !== 'string' || ar.indexOf(':') === -1) return { w: 9, h: 16 };
+    var bits = ar.split(':').map(Number);
+    if (bits.length !== 2 || bits.some(function(n){ return !n || isNaN(n); })) return { w:9, h:16 };
+    return { w: bits[0], h: bits[1] };
+  }
+
+  // ---------------------------------------------------------------------
+  // STEP 1 — Upload
+  // ---------------------------------------------------------------------
   var dropzone = el('dropzone');
   var fileInput = el('fileInput');
+
   dropzone.addEventListener('click', function(){ fileInput.click(); });
-  fileInput.addEventListener('change', function(e){ if(e.target.files[0]) handleFile(e.target.files[0]); });
+  ['dragenter','dragover'].forEach(function(evt){
+    dropzone.addEventListener(evt, function(e){ e.preventDefault(); dropzone.classList.add('drag'); });
+  });
+  ['dragleave','drop'].forEach(function(evt){
+    dropzone.addEventListener(evt, function(e){ e.preventDefault(); dropzone.classList.remove('drag'); });
+  });
+  dropzone.addEventListener('drop', function(e){
+    var f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+  fileInput.addEventListener('change', function(e){
+    var f = e.target.files[0];
+    if (f) handleFile(f);
+  });
 
   function handleFile(file){
+    var uploadBanner = el('uploadBanner');
+    clearBanner(uploadBanner);
+
+    if (!file.type.startsWith('video/')){
+      banner(uploadBanner, 'err', 'That doesn\'t look like a video file (' + (file.type || 'unknown type') + '). Choose an MP4, WebM, or MOV file.');
+      return;
+    }
+
+    var probe = document.createElement('video');
+    probe.preload = 'metadata';
+    var canPlay = probe.canPlayType(file.type);
+    if (canPlay === ''){
+      banner(uploadBanner, 'warn', 'Your browser reports it may not be able to decode "' + file.type + '". We\'ll still try to load it — if the preview stays blank, convert it to MP4 (H.264) first.');
+    }
+
     state.file = file;
-    state.videoEl.src = URL.createObjectURL(file);
+    var url = URL.createObjectURL(file);
+    state.videoEl.src = url;
     el('videoMetaWrap').style.display = 'block';
+
     state.videoEl.onloadedmetadata = function(){
       state.duration = state.videoEl.duration;
       el('videoMeta').innerHTML =
         '<span><b>Name</b> ' + file.name + '</span>' +
         '<span><b>Size</b> ' + formatBytes(file.size) + '</span>' +
         '<span><b>Duration</b> ' + formatDuration(state.duration) + '</span>' +
-        '<span><b>Native Res</b> ' + state.videoEl.videoWidth + '×' + state.videoEl.videoHeight + '</span>';
+        '<span><b>Resolution</b> ' + state.videoEl.videoWidth + '×' + state.videoEl.videoHeight + '</span>';
+      el('renderBtn').disabled = !state.parsedClips;
       el('compressBtn').disabled = false;
       el('compressPreset').disabled = false;
-      if (state.parsedClips) el('renderBtn').disabled = false;
+    };
+    state.videoEl.onerror = function(){
+      banner(uploadBanner, 'err', 'Could not decode this video in your browser. Try converting it to MP4 (H.264 + AAC) and re-uploading.');
     };
   }
 
-  // --- Native Hardware Stream Compressor ---
-  function compressNative(sourceVideo, targetHeight, bitrate, onProgress){
+  // ---------------------------------------------------------------------
+  // STEP 2 — Compress & link locally in the browser.
+  // ---------------------------------------------------------------------
+
+  // Shared by the short-cutting/render step below, which still uses canvas + MediaRecorder.
+  function pickMimeType(){
+    var candidates = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm'
+    ];
+    for (var i = 0; i < candidates.length; i++){
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(candidates[i])) return candidates[i];
+    }
+    return null;
+  }
+
+  function compressVideo(sourceVideo, targetHeight, bitrate, onProgress){
     return new Promise(function(resolve, reject){
       var canvas = document.createElement('canvas');
       var ctx = canvas.getContext('2d');
+      if (!ctx || !canvas.captureStream || !window.MediaRecorder){
+        reject(new Error('This browser does not support local video compression. Try a recent Chrome, Edge, or Firefox.'));
+        return;
+      }
       var scale = targetHeight / sourceVideo.videoHeight;
       canvas.width = Math.round(sourceVideo.videoWidth * scale);
       canvas.height = targetHeight;
-
       var stream = canvas.captureStream(30);
-
-      // Attach audio track
-      if (sourceVideo.captureStream || sourceVideo.mozCaptureStream) {
-        var audioStream = (sourceVideo.captureStream || sourceVideo.mozCaptureStream).call(sourceVideo);
-        audioStream.getAudioTracks().forEach(function(track){ stream.addTrack(track); });
+      var sourceStream = (sourceVideo.captureStream || sourceVideo.mozCaptureStream);
+      if (sourceStream){
+        sourceStream.call(sourceVideo).getAudioTracks().forEach(function(track){ stream.addTrack(track); });
       }
-
       var mime = 'video/webm;codecs=vp9,opus';
       if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
-
-      var recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate });
+      var recorder;
+      try { recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate }); }
+      catch (err){ reject(err); return; }
       var chunks = [];
-      recorder.ondataavailable = function(e){ if (e.data.size > 0) chunks.push(e.data); };
-      recorder.onstop = function(){
-        sourceVideo.muted = false;
-        resolve(new Blob(chunks, { type: 'video/webm' }));
-      };
-      recorder.onerror = function(e){
-        sourceVideo.muted = false;
-        reject(e.error || new Error('Stream compression failed.'));
-      };
-
+      var settled = false;
+      function cleanup(){ stream.getTracks().forEach(function(track){ track.stop(); }); sourceVideo.muted = false; }
+      recorder.ondataavailable = function(e){ if (e.data.size) chunks.push(e.data); };
+      recorder.onstop = function(){ if (settled) return; settled = true; cleanup(); resolve(new Blob(chunks, { type: 'video/webm' })); };
+      recorder.onerror = function(e){ if (settled) return; settled = true; cleanup(); reject(e.error || new Error('Stream compression failed.')); };
       sourceVideo.currentTime = 0;
       sourceVideo.muted = true;
-
       sourceVideo.onseeked = function(){
         sourceVideo.onseeked = null;
         recorder.start();
-        
-        var playPromise = sourceVideo.play();
-        if (playPromise !== undefined) {
-          playPromise.then(function() {
-            function step(){
-              if (sourceVideo.paused || sourceVideo.ended){
-                if (recorder.state !== 'inactive') recorder.stop();
-                return;
-              }
-              if (sourceVideo.readyState >= 2) {
-                ctx.drawImage(sourceVideo, 0, 0, canvas.width, canvas.height);
-              }
-              onProgress(sourceVideo.currentTime / sourceVideo.duration);
-              requestAnimationFrame(step);
-            }
-            step();
-          }).catch(reject);
-        }
+        sourceVideo.play().then(function(){
+          function draw(){
+            if (sourceVideo.paused || sourceVideo.ended){ if (recorder.state !== 'inactive') recorder.stop(); return; }
+            if (sourceVideo.readyState >= 2) ctx.drawImage(sourceVideo, 0, 0, canvas.width, canvas.height);
+            onProgress(sourceVideo.duration ? sourceVideo.currentTime / sourceVideo.duration : 0);
+            requestAnimationFrame(draw);
+          }
+          draw();
+        }).catch(function(err){ if (recorder.state !== 'inactive') recorder.stop(); if (!settled){ settled = true; cleanup(); reject(err); } });
       };
+    });
+  }
+
+  function renderCompressRuler(pct){
+    var ruler = el('compressRuler');
+    if (!ruler.dataset.built){
+      var frag = document.createDocumentFragment();
+      for (var i = 0; i < 40; i++){
+        var t = document.createElement('div');
+        t.className = 'tick';
+        frag.appendChild(t);
+      }
+      ruler.appendChild(frag);
+      ruler.dataset.built = '1';
+    }
+    var onCount = Math.round(pct * ruler.children.length);
+    Array.prototype.forEach.call(ruler.children, function(t, i){
+      t.classList.toggle('on', i < onCount);
     });
   }
 
   el('compressBtn').addEventListener('click', function(){
-    var targetH = parseInt(el('compressPreset').value, 10);
-    // Increased bitrates: 3Mbps, 6Mbps, 12Mbps
-    var bitrates = { 480: 3000000, 720: 6000000, 1080: 12000000 };
-    
-    clearBanner(el('compressBanner'));
+    var cBanner = el('compressBanner');
+    clearBanner(cBanner);
+    if (!state.file){
+      banner(cBanner, 'warn', 'Upload a video first.');
+      return;
+    }
+
+    var targetHeight = parseInt(el('compressPreset').value, 10);
     el('compressBtn').disabled = true;
     el('compressProgressWrap').style.display = 'block';
+    el('compressResult').style.display = 'none';
+    el('compressPct').textContent = '0%';
+    renderCompressRuler(0);
+    banner(cBanner, 'ok', 'Compressing locally in your browser…');
 
-    compressNative(state.videoEl, targetH, bitrates[targetH], function(pct){
+    var bitrates = { 480: 3000000, 720: 6000000, 1080: 12000000 };
+    compressVideo(state.videoEl, targetHeight, bitrates[targetHeight], function(pct){
+      clearBanner(cBanner);
       el('compressPct').textContent = Math.round(pct * 100) + '%';
+      renderCompressRuler(pct);
     }).then(function(blob){
-      state.compressedBlob = blob;
       el('compressProgressWrap').style.display = 'none';
       el('compressBtn').disabled = false;
-      
+
       var url = URL.createObjectURL(blob);
+      state.compressedBlob = blob;
       el('compressedPreview').src = url;
+      var reduction = state.file.size ? Math.round((1 - blob.size / state.file.size) * 100) : 0;
       el('compressedMeta').innerHTML =
-        '<span><b>Original Size</b> ' + formatBytes(state.file.size) + '</span>' +
-        '<span><b>Compressed</b> ' + formatBytes(blob.size) + '</span>' +
-        '<span><b>Savings</b> ' + Math.round((1 - blob.size / state.file.size) * 100) + '%</span>';
-      
-      el('compressedDownload').href = url;
-      el('compressedDownload').download = 'compressed_' + targetH + 'p.webm';
+        '<span><b>New size</b> ' + formatBytes(blob.size) + '</span>' +
+        '<span><b>Original</b> ' + formatBytes(state.file.size) + '</span>' +
+        '<span><b>Reduction</b> ' + (reduction > 0 ? reduction + '%' : '—') + '</span>';
+      var dl = el('compressedDownload');
+      dl.href = url;
+      dl.download = (state.file.name || 'video').replace(/\.[^.]+$/, '') + '_compressed.webm';
       el('compressResult').style.display = 'block';
+      banner(cBanner, 'ok', 'Compressed locally to WebM.');
       el('b44UploadBtn').disabled = false;
     }).catch(function(err){
       el('compressProgressWrap').style.display = 'none';
       el('compressBtn').disabled = false;
-      banner(el('compressBanner'), 'err', 'Compression error: ' + err.message);
+      banner(cBanner, 'err', 'Compression failed: ' + err.message);
     });
   });
 
-  // --- Setup Models ---
+  el('videoLinkInput').addEventListener('input', function(e){
+    state.videoLink = e.target.value.trim();
+  });
+
+  // -----------------------------------------------------------------
+  // Base44 file-store push
+  // -----------------------------------------------------------------
+
+  function b44Upload(endpoint, apiKey, blob, filename){
+    var form = new FormData();
+    form.append('file', blob, filename);
+    return fetch(endpoint, {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey },
+      body: form
+    }).then(function(res){
+      return res.text().then(function(text){
+        var json = null;
+        try { json = JSON.parse(text); } catch (e){ /* not JSON, leave null */ }
+        if (!res.ok){
+          var msg = (json && (json.message || json.error)) || (res.status + ' ' + res.statusText);
+          throw new Error(msg);
+        }
+        return { raw: text, json: json };
+      });
+    });
+  }
+
+  // StoredFile records use `file_url` — that's checked first since it's the
+  // documented field name. The rest stay as fallbacks in case the upload
+  // response wraps the record differently (e.g. under "data" or "file").
+  function extractStoredFile(json){
+    if (!json || typeof json !== 'object') return null;
+    var candidates = [
+      json, json.data, json.file, json.record, json.result
+    ];
+    for (var i = 0; i < candidates.length; i++){
+      var c = candidates[i];
+      if (c && typeof c === 'object' && typeof c.file_url === 'string' && /^https?:\/\//.test(c.file_url)){
+        return c;
+      }
+    }
+    return null;
+  }
+
+  function extractLinkFromResponse(json){
+    var stored = extractStoredFile(json);
+    if (stored) return stored.file_url;
+
+    if (!json || typeof json !== 'object') return null;
+    var candidates = [
+      json.url, json.fileUrl, json.downloadUrl, json.download_url,
+      json.publicUrl, json.public_url, json.link,
+      json.data && json.data.url,
+      json.file && json.file.url,
+      json.result && json.result.url
+    ];
+    for (var i = 0; i < candidates.length; i++){
+      if (typeof candidates[i] === 'string' && /^https?:\/\//.test(candidates[i])) return candidates[i];
+    }
+    return null;
+  }
+
+  el('b44UploadBtn').addEventListener('click', function(){
+    var bBanner = el('b44Banner');
+    clearBanner(bBanner);
+
+    if (!state.compressedBlob){
+      banner(bBanner, 'warn', 'Compress the video first — that\'s what gets uploaded.');
+      return;
+    }
+
+    var endpoint = el('b44Endpoint').value.trim();
+    var apiKey = el('b44Key').value.trim();
+
+    if (!endpoint || !apiKey){
+      banner(bBanner, 'warn', 'Fill in the endpoint URL and your x-api-key.');
+      return;
+    }
+
+    var blob = state.compressedBlob;
+    if (blob.size > 100 * 1024 * 1024){
+      banner(bBanner, 'warn', 'This file is ' + formatBytes(blob.size) + ', over the common 100MB upload ceiling. Try the 480p preset for a smaller file.');
+      return;
+    }
+
+    el('b44UploadBtn').disabled = true;
+    banner(bBanner, 'ok', 'Uploading…');
+
+    var filename = (state.file.name || 'video').replace(/\.[^.]+$/, '').replace(/[^a-z0-9-_]+/gi, '_') + '.mp4';
+
+    b44Upload(endpoint, apiKey, blob, filename).then(function(result){
+      el('b44UploadBtn').disabled = false;
+      clearBanner(bBanner);
+
+      var stored = extractStoredFile(result.json);
+      var link = stored ? stored.file_url : extractLinkFromResponse(result.json);
+      el('b44Result').style.display = 'block';
+
+      if (link){
+        state.videoLink = link;
+        el('videoLinkInput').value = link;
+        var metaBits = ['<span><b>Link</b> ' + link + '</span>'];
+        if (stored){
+          if (stored.name) metaBits.push('<span><b>Name</b> ' + stored.name + '</span>');
+          if (typeof stored.file_size === 'number') metaBits.push('<span><b>Size</b> ' + formatBytes(stored.file_size) + '</span>');
+          if (stored.id) metaBits.push('<span><b>ID</b> ' + stored.id + '</span>');
+        }
+        el('b44Meta').innerHTML = metaBits.join('');
+        el('b44RawWrap').style.display = 'none';
+        banner(bBanner, 'ok', 'Uploaded — link filled in below.');
+      } else {
+        el('b44Meta').innerHTML = '<span>Uploaded, but couldn\'t find a URL field in the response automatically.</span>';
+        el('b44Raw').value = result.raw;
+        el('b44RawWrap').style.display = 'block';
+        banner(bBanner, 'warn', 'Uploaded. Check the raw response below and paste the file link into the field beneath this panel yourself.');
+      }
+    }).catch(function(err){
+      el('b44UploadBtn').disabled = false;
+      banner(bBanner, 'err', 'Upload failed: ' + err.message);
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // STEP 3 — Model selection
+  // ---------------------------------------------------------------------
+  var modelGrid = el('modelGrid');
+  var modelVideoSupport = {}; // key -> bool, mutable via checkbox
+
   MODELS.forEach(function(m){
+    modelVideoSupport[m.key] = m.defaultVideo;
     var card = document.createElement('div');
     card.className = 'model-card' + (m.key === state.selectedModel ? ' selected' : '');
-    card.innerHTML = '<div class="name">' + m.name + '</div><span class="tag">' + m.tag + '</span>';
-    card.addEventListener('click', function(){
+    card.dataset.key = m.key;
+    card.innerHTML =
+      '<div class="name">' + m.name + '</div>' +
+      '<span class="tag">' + m.tag + '</span>' +
+      '<label class="toggle"><input type="checkbox" ' + (m.defaultVideo ? 'checked' : '') + ' data-video-toggle="' + m.key + '"> Supports direct video upload for me</label>';
+    card.addEventListener('click', function(e){
+      if (e.target.matches('input[type=checkbox]')) return; // handled separately
       state.selectedModel = m.key;
-      document.querySelectorAll('.model-card').forEach(function(c){ c.classList.remove('selected'); });
+      Array.prototype.forEach.call(modelGrid.children, function(c){ c.classList.remove('selected'); });
       card.classList.add('selected');
     });
-    el('modelGrid').appendChild(card);
+    modelGrid.appendChild(card);
   });
 
-  el('templateInput').value = DEFAULT_TEMPLATE;
-  el('resetTemplateBtn').addEventListener('click', function(){ el('templateInput').value = DEFAULT_TEMPLATE; });
+  modelGrid.addEventListener('change', function(e){
+    if (e.target.matches('input[data-video-toggle]')){
+      var key = e.target.getAttribute('data-video-toggle');
+      modelVideoSupport[key] = e.target.checked;
+    }
+  });
 
-  // --- Generate Prompt ---
+  // ---------------------------------------------------------------------
+  // STEP 4 — Template
+  // ---------------------------------------------------------------------
+  var templateInput = el('templateInput');
+  templateInput.value = DEFAULT_TEMPLATE;
+  el('resetTemplateBtn').addEventListener('click', function(){
+    templateInput.value = DEFAULT_TEMPLATE;
+  });
+
+  // ---------------------------------------------------------------------
+  // STEP 5 — Prompt generation
+  // ---------------------------------------------------------------------
   el('generatePromptBtn').addEventListener('click', function(){
-    var prompt = "Task: Analyze video '" + (state.file ? state.file.name : "upload") + "' (" + formatDuration(state.duration) + " long).\n\n" +
-      "Create high-engagement shorts editing plan in exact JSON:\n\n<Code>\n" + el('templateInput').value + "\n</Code>";
+    var pBanner = el('promptBanner');
+    clearBanner(pBanner);
+
+    if (!state.file){
+      banner(pBanner, 'warn', 'Upload a video first so the prompt can reference its length and filename.');
+    }
+
+    var template = templateInput.value.trim();
+    try {
+      JSON.parse(template);
+    } catch (err){
+      banner(pBanner, 'err', 'Your editing-output template isn\'t valid JSON (' + err.message + '). Fix it in step 04 before generating the prompt.');
+      return;
+    }
+
+    var model = MODELS.find(function(m){ return m.key === state.selectedModel; });
+    var videoSupported = modelVideoSupport[model.key];
+    var durationLine = state.file ? ('The source video is "' + state.file.name + '", approximately ' + formatDuration(state.duration) + ' long.') : 'A source video will be attached separately.';
+
+    var link = (state.videoLink || '').trim();
+    var attachmentLine;
+    if (link && videoSupported){
+      attachmentLine = 'The video file is attached to this conversation — watch it directly. It is also hosted at ' + link + ' if you need a fallback way to access it.';
+    } else if (link){
+      attachmentLine = 'This model cannot take the video file directly in this session. The video is hosted at ' + link + ' — if you\'re able to fetch and analyze files from external links, use that; if not, ask the user to attach the file directly instead, or work from a transcript or timestamps they provide.';
+    } else if (videoSupported){
+      attachmentLine = 'The video file is attached to this conversation — watch it directly.';
+    } else {
+      attachmentLine = 'This model cannot take the video file directly in this session, so instead: work from the transcript, frame descriptions, or timestamps the user provides alongside this prompt, and ask for them if they are missing.';
+    }
+
+    var prompt = model.buildPrompt({
+      template: template,
+      durationLine: durationLine,
+      attachmentLine: attachmentLine
+    });
+
     el('promptOutput').value = prompt;
     el('copyPromptBtn').disabled = false;
+    if (!state.file){
+      // keep the warning visible even though we generated a prompt
+    } else {
+      clearBanner(pBanner);
+    }
   });
 
   el('copyPromptBtn').addEventListener('click', function(){
-    navigator.clipboard.writeText(el('promptOutput').value);
+    var out = el('promptOutput');
+    out.select();
+    navigator.clipboard.writeText(out.value).then(function(){
+      var btn = el('copyPromptBtn');
+      var original = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(function(){ btn.textContent = original; }, 1500);
+    }).catch(function(){
+      document.execCommand('copy');
+    });
   });
 
-  // --- Parse AI JSON Response ---
+  // ---------------------------------------------------------------------
+  // STEP 6 — Parse AI response
+  // ---------------------------------------------------------------------
+  function extractJsonBlock(text){
+    // Prefer content between <Code>...</Code>
+    var codeMatch = text.match(/<Code>([\s\S]*?)<\/Code>/i);
+    var candidate = codeMatch ? codeMatch[1] : text;
+
+    // Strip markdown fences if present
+    candidate = candidate.replace(/```json/gi, '').replace(/```/g, '');
+
+    // Try direct parse first
+    try { return JSON.parse(candidate.trim()); } catch (e) { /* fall through */ }
+
+    // Fall back to slicing from first "[" or "{" to the matching last "]" or "}"
+    var firstArr = candidate.indexOf('[');
+    var firstObj = candidate.indexOf('{');
+    var start = -1;
+    if (firstArr !== -1 && (firstObj === -1 || firstArr < firstObj)) start = firstArr;
+    else start = firstObj;
+
+    if (start === -1) throw new Error('No JSON array or object found in the response.');
+
+    var lastArr = candidate.lastIndexOf(']');
+    var lastObj = candidate.lastIndexOf('}');
+    var end = Math.max(lastArr, lastObj);
+    if (end === -1 || end < start) throw new Error('Could not find the closing bracket of the JSON block.');
+
+    var sliced = candidate.slice(start, end + 1);
+    return JSON.parse(sliced);
+  }
+
+  function validateClips(data){
+    var clips = Array.isArray(data) ? data : [data];
+    if (clips.length === 0) throw new Error('The parsed plan contains zero clips.');
+
+    return clips.map(function(clip, i){
+      var startSec = timecodeToSeconds(clip.start);
+      var endSec = timecodeToSeconds(clip.end);
+      if (isNaN(startSec) || isNaN(endSec)){
+        throw new Error('Clip ' + (i+1) + ' has an unreadable start/end timestamp.');
+      }
+      if (endSec <= startSec){
+        throw new Error('Clip ' + (i+1) + ': end timestamp must be after the start timestamp.');
+      }
+      if (state.duration && startSec > state.duration){
+        throw new Error('Clip ' + (i+1) + ' starts (' + formatDuration(startSec) + ') after the video even ends (' + formatDuration(state.duration) + ').');
+      }
+      return {
+        start: startSec,
+        end: Math.min(endSec, state.duration || endSec),
+        title: clip.title || ('Short ' + (i+1)),
+        hook: clip.hook || '',
+        captions: Array.isArray(clip.captions) ? clip.captions : [],
+        aspectRatio: clip.aspectRatio || '9:16',
+        effects: Array.isArray(clip.effects) ? clip.effects : []
+      };
+    });
+  }
+
   el('parseBtn').addEventListener('click', function(){
-    try {
-      var raw = el('responseInput').value;
-      var match = raw.match(/<Code>([\s\S]*?)<\/Code>/i);
-      var jsonStr = match ? match[1] : raw;
-      state.parsedClips = JSON.parse(jsonStr.trim());
-      banner(el('parseBanner'), 'ok', 'Successfully parsed ' + state.parsedClips.length + ' clip(s).');
-      if (state.file) el('renderBtn').disabled = false;
-    } catch(e) {
-      banner(el('parseBanner'), 'err', 'Invalid JSON response: ' + e.message);
+    var pBanner = el('parseBanner');
+    clearBanner(pBanner);
+    var raw = el('responseInput').value;
+
+    if (!raw.trim()){
+      banner(pBanner, 'warn', 'Paste the AI\'s reply above first.');
+      return;
     }
+
+    var data, clips;
+    try {
+      data = extractJsonBlock(raw);
+    } catch (err){
+      banner(pBanner, 'err', 'Couldn\'t find valid JSON in that response: ' + err.message);
+      return;
+    }
+    try {
+      clips = validateClips(data);
+    } catch (err){
+      banner(pBanner, 'err', 'The editing plan has a problem: ' + err.message);
+      return;
+    }
+
+    state.parsedClips = clips;
+    el('renderBtn').disabled = !state.file;
+    banner(pBanner, 'ok', 'Parsed ' + clips.length + ' clip' + (clips.length === 1 ? '' : 's') + ' successfully. ' + (state.file ? 'Ready to render.' : 'Upload the source video above, then render.'));
   });
 
-  // --- Render Clip Shorts ---
-  el('renderBtn').addEventListener('click', function(){
-    el('progressWrap').style.display = 'block';
-    el('results').innerHTML = '';
+  // ---------------------------------------------------------------------
+  // STEP 7 — Render shorts (canvas + MediaRecorder)
+  // ---------------------------------------------------------------------
+  function activeCaption(clip, elapsed){
+    if (!clip.captions.length) return '';
+    // Support either plain strings (spread evenly) or {text,start,end} objects (relative seconds).
+    if (typeof clip.captions[0] === 'object'){
+      var match = clip.captions.find(function(c){
+        return elapsed >= (c.start || 0) && elapsed <= (c.end != null ? c.end : Infinity);
+      });
+      return match ? match.text : '';
+    }
+    var duration = clip.end - clip.start;
+    var slot = duration / clip.captions.length;
+    var idx = Math.min(clip.captions.length - 1, Math.floor(elapsed / slot));
+    return clip.captions[idx];
+  }
 
-    var clips = state.parsedClips;
-    var canvas = el('livePreviewCanvas');
-    var ctx = canvas.getContext('2d');
-    canvas.width = 360; canvas.height = 640;
+  function drawCard(ctx, w, h, text, opts){
+    ctx.save();
+    ctx.font = (opts.weight || '700') + ' ' + opts.size + 'px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    var padding = 18;
+    var metrics = ctx.measureText(text);
+    var boxW = Math.min(w - 40, metrics.width + padding * 2);
+    var boxH = opts.size + padding;
+    var x = w / 2, y = opts.y;
+    ctx.fillStyle = opts.bg || 'rgba(0,0,0,0.55)';
+    roundRect(ctx, x - boxW/2, y - boxH/2, boxW, boxH, 10);
+    ctx.fill();
+    ctx.fillStyle = opts.color || '#fff';
+    ctx.fillText(text, x, y, w - 40);
+    ctx.restore();
+  }
+  function roundRect(ctx, x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
 
-    var playAudible = el('audioToggle').checked;
-    state.videoEl.muted = !playAudible;
-
-    var index = 0;
-    function renderNext(){
-      if (index >= clips.length){
-        el('progressWrap').style.display = 'none';
-        state.videoEl.muted = false;
+  function processClip(clip, sourceVideo, canvas, onProgress){
+    return new Promise(function(resolve, reject){
+      var mime = pickMimeType();
+      if (!mime){
+        reject(new Error('Your browser does not support recording video (MediaRecorder). Try a recent Chrome, Edge, or Firefox.'));
         return;
       }
 
-      var clip = clips[index];
-      var startSec = clip.start.split(':').reduce((acc, t) => (60 * acc) + +t, 0);
-      var endSec = clip.end.split(':').reduce((acc, t) => (60 * acc) + +t, 0);
+      // canvas is the visible <canvas id="livePreviewCanvas"> — reused across clips so the
+      // person can watch the actual cut happening, not just a progress bar.
+      var ratio = parseAspectRatio(clip.aspectRatio);
+      var canvasH = 640;
+      var canvasW = Math.round(canvasH * (ratio.w / ratio.h));
+      canvas.width = canvasW; canvas.height = canvasH;
+      var ctx = canvas.getContext('2d');
+
+      var srcW = sourceVideo.videoWidth, srcH = sourceVideo.videoHeight;
+      var srcRatio = srcW / srcH, dstRatio = canvasW / canvasH;
+      var cropW, cropH;
+      if (srcRatio > dstRatio){ cropH = srcH; cropW = srcH * dstRatio; }
+      else { cropW = srcW; cropH = srcW / dstRatio; }
+      var cropX = (srcW - cropW) / 2, cropY = (srcH - cropH) / 2;
 
       var stream = canvas.captureStream(30);
-
-      if (state.videoEl.captureStream || state.videoEl.mozCaptureStream) {
-        var sourceStream = (state.videoEl.captureStream || state.videoEl.mozCaptureStream).call(state.videoEl);
-        sourceStream.getAudioTracks().forEach(function(track){
-          stream.addTrack(track);
-        });
-      }
-
-      var mime = 'video/webm;codecs=vp9,opus';
-      if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
-
-      var recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6000000 });
+      var recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5_000_000 });
       var chunks = [];
       recorder.ondataavailable = function(e){ if (e.data.size > 0) chunks.push(e.data); };
+
+      var duration = clip.end - clip.start;
+      var wantsZoomIn = clip.effects.indexOf('zoom-in') !== -1;
+      var wantsZoomOut = clip.effects.indexOf('zoom-out') !== -1;
+
+      var finished = false;
+      function finish(){
+        if (finished) return;
+        finished = true;
+        recorder.stop();
+      }
+
       recorder.onstop = function(){
         var blob = new Blob(chunks, { type: 'video/webm' });
-        var url = URL.createObjectURL(blob);
-        var card = document.createElement('div');
-        card.className = 'short-card';
-        card.innerHTML = 
-          '<video src="' + url + '" controls></video>' +
-          '<div class="meta"><b>' + (clip.title || 'Short #' + (index+1)) + '</b></div>' +
-          '<a class="btn-primary dl" href="' + url + '" download="short_' + (index+1) + '.webm">Download Short</a>';
-        el('results').appendChild(card);
-        index++;
-        renderNext();
+        resolve(blob);
       };
+      recorder.onerror = function(e){ reject(e.error || new Error('Recording failed.')); };
 
-      state.videoEl.currentTime = startSec;
-      state.videoEl.onseeked = function(){
-        state.videoEl.onseeked = null;
-        recorder.start();
-        state.videoEl.play();
+      function drawFrame(){
+        var elapsed = sourceVideo.currentTime - clip.start;
+        if (elapsed < 0) elapsed = 0;
 
-        function draw(){
-          if (state.videoEl.currentTime >= endSec || state.videoEl.paused){
-            state.videoEl.pause();
-            recorder.stop();
-            return;
-          }
-          if (state.videoEl.readyState >= 2) {
-            ctx.drawImage(state.videoEl, 0, 0, canvas.width, canvas.height);
-          }
-          requestAnimationFrame(draw);
+        var scale = 1;
+        if (wantsZoomIn) scale = 1 + 0.15 * Math.min(1, elapsed / duration);
+        else if (wantsZoomOut) scale = 1.15 - 0.15 * Math.min(1, elapsed / duration);
+
+        var drawW = canvasW * scale, drawH = canvasH * scale;
+        var offX = (canvasW - drawW) / 2, offY = (canvasH - drawH) / 2;
+
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvasW, canvasH);
+        ctx.drawImage(sourceVideo, cropX, cropY, cropW, cropH, offX, offY, drawW, drawH);
+
+        if (clip.hook && elapsed < 2.5){
+          drawCard(ctx, canvasW, canvasH, clip.hook, { y: 90, size: 40, bg: 'rgba(0,217,184,0.85)', color: '#06201c' });
         }
-        draw();
+        var cap = activeCaption(clip, elapsed);
+        if (cap){
+          drawCard(ctx, canvasW, canvasH, cap, { y: canvasH - 130, size: 34 });
+        }
+
+        onProgress(Math.min(1, elapsed / duration), sourceVideo.currentTime);
+
+        if (sourceVideo.currentTime >= clip.end || sourceVideo.ended){
+          finish();
+          return;
+        }
+        requestAnimationFrame(drawFrame);
+      }
+
+      sourceVideo.currentTime = clip.start;
+      sourceVideo.onseeked = function(){
+        sourceVideo.onseeked = null;
+        recorder.start();
+        sourceVideo.play().then(function(){
+          requestAnimationFrame(drawFrame);
+        }).catch(reject);
       };
+    });
+  }
+
+  function renderRuler(pct){
+    var ruler = el('ruler');
+    if (!ruler.dataset.built){
+      var frag = document.createDocumentFragment();
+      for (var i = 0; i < 40; i++){
+        var t = document.createElement('div');
+        t.className = 'tick';
+        frag.appendChild(t);
+      }
+      ruler.appendChild(frag);
+      ruler.dataset.built = '1';
     }
-    renderNext();
+    var onCount = Math.round(pct * ruler.children.length);
+    Array.prototype.forEach.call(ruler.children, function(t, i){
+      t.classList.toggle('on', i < onCount);
+    });
+  }
+
+  // Builds the "where in the full video does each clip live" bar, and returns
+  // a function to move the playhead / mark segments as active or done.
+  function buildClipTimeline(clips, totalDuration){
+    var track = el('clipTimeline');
+    track.querySelectorAll('.segment').forEach(function(s){ s.remove(); });
+    el('timelineTotal').textContent = formatDuration(totalDuration);
+
+    var segments = clips.map(function(clip){
+      var seg = document.createElement('div');
+      seg.className = 'segment';
+      var leftPct = (clip.start / totalDuration) * 100;
+      var widthPct = Math.max(0.6, ((clip.end - clip.start) / totalDuration) * 100);
+      seg.style.left = leftPct + '%';
+      seg.style.width = widthPct + '%';
+      seg.title = clip.title;
+      track.appendChild(seg);
+      return seg;
+    });
+    // Keep playhead on top of the freshly-inserted segments.
+    track.appendChild(el('playhead'));
+
+    return {
+      setActive: function(index){
+        segments.forEach(function(s, i){
+          s.classList.toggle('active', i === index);
+          s.classList.toggle('done', i < index);
+        });
+      },
+      movePlayhead: function(absoluteTime){
+        el('playhead').style.left = Math.min(100, (absoluteTime / totalDuration) * 100) + '%';
+      }
+    };
+  }
+
+  el('audioToggle').addEventListener('change', function(e){
+    state.playAudio = e.target.checked;
   });
+
+  el('renderBtn').addEventListener('click', function(){
+    var rBanner = el('renderBanner');
+    clearBanner(rBanner);
+    el('results').innerHTML = '';
+
+    if (!state.file || !state.parsedClips){
+      banner(rBanner, 'warn', 'You need both a source video and a parsed editing plan before rendering.');
+      return;
+    }
+
+    // Use a fresh, hidden video element for rendering so we don't disturb the visible preview.
+    // It still needs to actually decode/play frames — it's just not shown; the live-preview
+    // canvas below is what the person watches instead.
+    var renderVideo = document.createElement('video');
+    renderVideo.src = state.videoEl.src;
+    renderVideo.crossOrigin = 'anonymous';
+    renderVideo.playsInline = true;
+    renderVideo.muted = !state.playAudio;
+    renderVideo.style.display = 'none';
+    document.body.appendChild(renderVideo);
+
+    var liveCanvas = el('livePreviewCanvas');
+
+    el('renderBtn').disabled = true;
+    el('progressWrap').style.display = 'block';
+
+    var clips = state.parsedClips;
+    var total = clips.length;
+    var completed = 0;
+    var timeline = buildClipTimeline(clips, state.duration);
+
+    function next(index){
+      if (index >= total){
+        el('progressWrap').style.display = 'none';
+        el('renderBtn').disabled = false;
+        renderVideo.remove();
+        if (state.generatedShorts.length){
+          banner(rBanner, 'ok', 'Rendered ' + state.generatedShorts.length + ' of ' + total + ' short(s).');
+        }
+        return;
+      }
+      var clip = clips[index];
+      el('progressLabel').textContent = 'Rendering "' + clip.title + '" (' + (index+1) + '/' + total + ')';
+      timeline.setActive(index);
+
+      renderVideo.onloadedmetadata = function(){
+        processClip(clip, renderVideo, liveCanvas, function(clipPct, absoluteTime){
+          var overall = (completed + clipPct) / total;
+          el('progressPct').textContent = Math.round(overall * 100) + '%';
+          renderRuler(overall);
+          timeline.movePlayhead(absoluteTime);
+        }).then(function(blob){
+          completed++;
+          addResultCard(clip, blob);
+          next(index + 1);
+        }).catch(function(err){
+          banner(rBanner, 'err', 'Failed to render "' + clip.title + '": ' + err.message);
+          completed++;
+          next(index + 1);
+        });
+      };
+      // Trigger metadata (re)load if already loaded from a previous clip.
+      if (renderVideo.readyState >= 1) renderVideo.onloadedmetadata();
+    }
+
+    next(0);
+  });
+
+  function addResultCard(clip, blob){
+    var url = URL.createObjectURL(blob);
+    state.generatedShorts.push({ clip: clip, url: url, blob: blob });
+
+    var card = document.createElement('div');
+    card.className = 'short-card';
+    card.innerHTML =
+      '<video src="' + url + '" controls loop></video>' +
+      '<div class="meta">' +
+        '<div class="title">' + clip.title + '</div>' +
+        '<div class="time">' + formatDuration(clip.start) + ' – ' + formatDuration(clip.end) + ' · ' + clip.aspectRatio + '</div>' +
+      '</div>' +
+      '<a class="btn-primary dl" download="' + clip.title.replace(/[^a-z0-9]+/gi,'_') + '.webm" href="' + url + '">Download</a>';
+    el('results').appendChild(card);
+  }
 
 })();
 </script>
