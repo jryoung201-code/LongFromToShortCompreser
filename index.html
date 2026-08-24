@@ -608,6 +608,21 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
   }
   function clearBanner(container){ container.innerHTML = ''; }
 
+  // Not every rejection is a proper Error (workers/wasm can reject with plain
+  // strings, event objects, or nothing at all) — this stops those from
+  // rendering as a bare "undefined" in the UI.
+  function errText(err){
+    if (!err) return 'Unknown error (no details were provided).';
+    if (typeof err === 'string') return err;
+    if (err.message) return err.message;
+    try {
+      var s = JSON.stringify(err);
+      return (s && s !== '{}') ? s : String(err);
+    } catch (e){
+      return String(err);
+    }
+  }
+
   function formatBytes(bytes){
     if (!bytes) return '0 B';
     var units = ['B','KB','MB','GB'];
@@ -736,6 +751,20 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     });
   }
 
+  // ffmpeg's core runs inside a Web Worker, which resolves relative URLs against
+  // its own blob: context rather than this page's folder — so a plain relative
+  // path for coreURL/wasmURL doesn't reliably reach the worker. Fetching the
+  // files ourselves and handing over Blob URLs (the approach ffmpeg.wasm's own
+  // docs use) sidesteps that.
+  function toBlobURL(url, mimeType){
+    return fetch(url).then(function(res){
+      if (!res.ok) throw new Error('Could not fetch ' + url + ' (HTTP ' + res.status + ') — check the file exists at that path in the repo.');
+      return res.blob();
+    }).then(function(blob){
+      return URL.createObjectURL(new Blob([blob], { type: mimeType }));
+    });
+  }
+
   function getFfmpeg(){
     if (ffmpegLoadPromise) return ffmpegLoadPromise;
     ffmpegLoadPromise = loadScriptTag(FFMPEG_BASE + 'ffmpeg.js').then(function(){
@@ -743,13 +772,18 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
         throw new Error('ffmpeg.js loaded but did not expose FFmpegWASM — the vendor files may be the wrong version.');
       }
       var ffmpeg = new window.FFmpegWASM.FFmpeg();
-      return ffmpeg.load({
-        coreURL: FFMPEG_BASE + 'ffmpeg-core.js',
-        wasmURL: FFMPEG_BASE + 'ffmpeg-core.wasm'
+      return Promise.all([
+        toBlobURL(FFMPEG_BASE + 'ffmpeg-core.js', 'text/javascript'),
+        toBlobURL(FFMPEG_BASE + 'ffmpeg-core.wasm', 'application/wasm')
+      ]).then(function(urls){
+        return ffmpeg.load({ coreURL: urls[0], wasmURL: urls[1] });
       }).then(function(){
         ffmpegInstance = ffmpeg;
         return ffmpeg;
       });
+    }).catch(function(err){
+      ffmpegLoadPromise = null; // let a retry actually retry instead of replaying a cached failure
+      throw err;
     });
     return ffmpegLoadPromise;
   }
