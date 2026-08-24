@@ -68,7 +68,7 @@
 
   main{ max-width: 980px; margin: 0 auto; padding: 0 32px; }
 
-  /* ---------- Step scaffold: this really is a sequential process, so numbering is meaningful ---------- */
+  /* ---------- Step scaffold ---------- */
   .step{
     border-top: 1px solid var(--line);
     padding: 40px 0;
@@ -142,7 +142,7 @@
   }
 
   /* ---------- Form elements ---------- */
-  textarea, input[type=text]{
+  textarea, input[type=text], select{
     width: 100%;
     background: #101215;
     border: 1px solid var(--line);
@@ -154,7 +154,7 @@
     resize: vertical;
     line-height: 1.6;
   }
-  textarea:focus, input:focus{ outline: 2px solid var(--accent); outline-offset: 1px; }
+  textarea:focus, input:focus, select:focus{ outline: 2px solid var(--accent); outline-offset: 1px; }
   label.field-label{ display:block; font-size: 12px; color: var(--text-dim); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .06em; }
 
   .gh-panel{
@@ -178,13 +178,13 @@
   }
   button:active{ transform: scale(.98); }
   button:disabled{ opacity: .4; cursor: not-allowed; }
-  .btn-primary{ background: var(--accent); color: #06201c; }
+  .btn-primary{ background: var(--accent); color: #06201c; text-decoration: none; display: inline-block; text-align: center; }
   .btn-primary:hover:not(:disabled){ opacity:.9; }
   .btn-ghost{ background: transparent; border-color: var(--line); color: var(--text); }
   .btn-ghost:hover:not(:disabled){ border-color: var(--text-dim); }
   .btn-row{ display:flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 
-  /* ---------- Progress / timeline ruler (signature element) ---------- */
+  /* ---------- Progress / timeline ruler ---------- */
   .timeline-ruler{
     height: 26px;
     display:flex;
@@ -201,7 +201,6 @@
   }
   .audio-toggle input{ width:15px; height:15px; accent-color: var(--accent); }
 
-  /* Clip timeline: shows where each clip sits in the full source video, with a live playhead */
   .clip-timeline{
     position: relative;
     height: 34px;
@@ -311,7 +310,7 @@
       <p class="desc">Most AI chat interfaces cap uploads (often 500MB or less). Compress the video down here, then either attach the smaller file directly, or upload it somewhere like a GitHub repo and paste the link below so the prompt can point to it instead.</p>
 
       <div class="btn-row">
-        <select id="compressPreset" disabled>
+        <select id="compressPreset" disabled style="width: auto;">
           <option value="480">480p — smallest file</option>
           <option value="720" selected>720p — good balance</option>
           <option value="1080">1080p — higher quality</option>
@@ -652,6 +651,26 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     return { w: bits[0], h: bits[1] };
   }
 
+  // Safe file reader helper that handles all variations of FFmpeg WASM bundles
+  async function fileToUint8Array(file){
+    if (window.FFmpegWASM && typeof window.FFmpegWASM.fetchFile === 'function') {
+      return await window.FFmpegWASM.fetchFile(file);
+    }
+    if (window.FFmpegUtil && typeof window.FFmpegUtil.fetchFile === 'function') {
+      return await window.FFmpegUtil.fetchFile(file);
+    }
+    if (typeof window.fetchFile === 'function') {
+      return await window.fetchFile(file);
+    }
+    if (file instanceof Uint8Array) return file;
+    if (file instanceof ArrayBuffer) return new Uint8Array(file);
+    if (file instanceof Blob || file instanceof File) {
+      var buf = await file.arrayBuffer();
+      return new Uint8Array(buf);
+    }
+    throw new Error('Unsupported input file type for conversion.');
+  }
+
   // ---------------------------------------------------------------------
   // STEP 1 — Upload
   // ---------------------------------------------------------------------
@@ -787,7 +806,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       ffmpeg.on('progress', progressHandler);
 
       try {
-        var fileData = await window.FFmpegWASM.fetchFile(file);
+        var fileData = await fileToUint8Array(file);
         await ffmpeg.writeFile(inName, fileData);
 
         var crf = CRF_BY_HEIGHT[targetHeight] || 26;
@@ -894,7 +913,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     }).then(function(res){
       return res.text().then(function(text){
         var json = null;
-        try { json = JSON.parse(text); } catch (e){ /* not JSON, leave null */ }
+        try { json = JSON.parse(text); } catch (e){ /* not JSON */ }
         if (!res.ok){
           var msg = (json && (json.message || json.error)) || (res.status + ' ' + res.statusText);
           throw new Error(msg);
@@ -1183,7 +1202,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
   });
 
   // ---------------------------------------------------------------------
-  // STEP 7 — Render shorts (canvas + MediaRecorder)
+  // STEP 7 — Render shorts
   // ---------------------------------------------------------------------
   function activeCaption(clip, elapsed){
     if (!clip.captions.length) return '';
