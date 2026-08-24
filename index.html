@@ -859,13 +859,13 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     el('compressResult').style.display = 'none';
     el('compressPct').textContent = '0%';
     renderCompressRuler(0);
-    banner(cBanner, 'ok', 'Loading the local FFmpeg engine (first run only)…');
+    banner(cBanner, 'ok', 'Loading the ffmpeg engine (first run only)…');
+
     compressVideo(state.file, targetHeight, function(pct){
       clearBanner(cBanner);
       el('compressPct').textContent = Math.round(pct * 100) + '%';
       renderCompressRuler(pct);
     }).then(function(blob){
-      clearBanner(cBanner);
       el('compressProgressWrap').style.display = 'none';
       el('compressBtn').disabled = false;
 
