@@ -738,6 +738,26 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     return mime && mime.indexOf('video/mp4') === 0 ? 'mp4' : 'webm';
   }
 
+  var SERVER_COMPRESS_URL = 'https://longfromtoshortcompreser.onrender.com/compress';
+
+  function compressOnServer(file, targetHeight, onStatus){
+    var form = new FormData();
+    form.append('video', file, file.name);
+    form.append('height', String(targetHeight));
+    onStatus('Uploading to the compression server…');
+    return fetch(SERVER_COMPRESS_URL, { method: 'POST', body: form }).then(function(res){
+      if (!res.ok){
+        return res.text().then(function(text){
+          var details;
+          try { details = JSON.parse(text); } catch (e) { details = null; }
+          throw new Error((details && details.error) || ('Server compression failed (' + res.status + ').'));
+        });
+      }
+      onStatus('Downloading compressed MP4…');
+      return res.blob();
+    });
+  }
+
   function compressVideo(sourceVideo, targetHeight, bitrate, onProgress){
     return new Promise(function(resolve, reject){
       var canvas = document.createElement('canvas');
@@ -824,14 +844,19 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     el('compressResult').style.display = 'none';
     el('compressPct').textContent = '0%';
     renderCompressRuler(0);
-    banner(cBanner, 'ok', 'Compressing locally in your browser…');
+    banner(cBanner, 'ok', 'Sending video to the local FFmpeg server…');
 
     var bitrates = { 480: 3000000, 720: 6000000, 1080: 12000000 };
-    compressVideo(state.videoEl, targetHeight, bitrates[targetHeight], function(pct){
-      clearBanner(cBanner);
-      el('compressPct').textContent = Math.round(pct * 100) + '%';
-      renderCompressRuler(pct);
+    compressOnServer(state.file, targetHeight, function(status){
+      banner(cBanner, 'ok', status);
+    }).catch(function(serverError){
+      banner(cBanner, 'warn', 'Server unavailable. Using browser compression instead…');
+      return compressVideo(state.videoEl, targetHeight, bitrates[targetHeight], function(pct){
+        el('compressPct').textContent = Math.round(pct * 100) + '%';
+        renderCompressRuler(pct);
+      });
     }).then(function(blob){
+      clearBanner(cBanner);
       el('compressProgressWrap').style.display = 'none';
       el('compressBtn').disabled = false;
 
@@ -848,7 +873,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       var extension = recordingExtension(blob.type);
       dl.download = (state.file.name || 'video').replace(/\.[^.]+$/, '') + '_compressed.' + extension;
       el('compressResult').style.display = 'block';
-      banner(cBanner, 'ok', 'Compressed locally to ' + extension.toUpperCase() + '.');
+      banner(cBanner, 'ok', 'Compressed to ' + extension.toUpperCase() + '.');
       el('b44UploadBtn').disabled = false;
     }).catch(function(err){
       el('compressProgressWrap').style.display = 'none';
@@ -946,7 +971,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
     el('b44UploadBtn').disabled = true;
     banner(bBanner, 'ok', 'Uploading…');
 
-    var filename = (state.file.name || 'video').replace(/\.[^.]+$/, '').replace(/[^a-z0-9-_]+/gi, '_') + '.mp4';
+    var filename = (state.file.name || 'video').replace(/\.[^.]+$/, '').replace(/[^a-z0-9-_]+/gi, '_') + '.' + recordingExtension(blob.type);
 
     b44Upload(endpoint, apiKey, blob, filename).then(function(result){
       el('b44UploadBtn').disabled = false;
