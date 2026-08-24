@@ -133,9 +133,6 @@
   .model-card.selected{ border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
   .model-card .name{ font-weight: 600; font-size: 15px; }
   .model-card .tag{ font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-top: 4px; display:block; }
-  .model-card label.toggle{
-    display:flex; align-items:center; gap:6px; margin-top: 12px; font-size: 12px; color: var(--text-dim);
-  }
 
   textarea, input[type=text], input[type=password], select{
     width: 100%;
@@ -185,8 +182,6 @@
     gap: 2px;
     margin: 18px 0 6px;
   }
-  .tick{ flex:1; background: var(--line); height: 6px; border-radius: 1px; }
-  .tick.on{ background: var(--accent); height: 18px; }
   .progress-label{ font-family: var(--mono); font-size: 12px; color: var(--text-dim); display:flex; justify-content:space-between; }
 
   .audio-toggle{
@@ -194,36 +189,11 @@
   }
   .audio-toggle input{ width:15px; height:15px; accent-color: var(--accent); }
 
-  .clip-timeline{
-    position: relative;
-    height: 34px;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    overflow: hidden;
-    margin-top: 18px;
-  }
-  .clip-timeline .segment{
-    position:absolute; top:5px; bottom:5px;
-    background: var(--accent-dim);
-    border: 1px solid var(--accent);
-    border-radius: 3px;
-    transition: background .15s;
-  }
-  .clip-timeline .segment.active{ background: var(--accent); }
-  .clip-timeline .segment.done{ background: #2a4a45; border-color: #2a4a45; }
-  .clip-timeline .playhead{
-    position:absolute; top:0; bottom:0; width:2px; background: var(--rec); left:0;
-    box-shadow: 0 0 6px var(--rec);
-    transition: left .05s linear;
-  }
-
   .live-preview-wrap{ margin-top: 18px; max-width: 220px; }
   .live-preview-wrap canvas{
     width:100%; display:block; border-radius: var(--radius); border: 1px solid var(--line); background:#000;
     aspect-ratio: 9/16;
   }
-  .live-preview-caption{ font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); margin-top: 6px; text-align:center; }
 
   .results-grid{
     display:grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap: 18px; margin-top: 18px;
@@ -233,8 +203,6 @@
   }
   .short-card video{ margin:0; border-radius:0; aspect-ratio: 9/16; object-fit: cover; }
   .short-card .meta{ padding: 12px; }
-  .short-card .title{ font-weight:600; font-size: 13px; margin-bottom:4px; }
-  .short-card .time{ font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
   .short-card .dl{ display:block; text-align:center; margin: 10px 12px 12px; padding: 8px; }
 
   .banner{
@@ -248,7 +216,6 @@
   .banner.warn{ background: rgba(245,197,24,.08); border-color: var(--warn); color: #f5dc8f; }
   .banner.ok{ background: rgba(0,217,184,.08); border-color: var(--accent); color: #9df3e6; }
 
-  code.inline{ font-family: var(--mono); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
   footer{ text-align:center; color: var(--text-dim); font-size: 12px; padding: 40px 0 10px; font-family: var(--mono); }
 
   @media (max-width: 640px){
@@ -298,7 +265,7 @@
     <div class="step-num"><b>02</b>Shrink</div>
     <div>
       <h2>Hardware-Accelerated Compression</h2>
-      <p class="desc">Combines stacked resolution scaling, framerate management, and high-efficiency browser encoding. Zero extra memory usage regardless of file size.</p>
+      <p class="desc">Combines stacked resolution scaling, framerate management, and high-efficiency browser encoding.</p>
 
       <div class="btn-row">
         <select id="compressPreset" disabled style="width: auto;">
@@ -311,7 +278,6 @@
 
       <div id="compressProgressWrap" style="display:none;">
         <div class="progress-label"><span id="compressLabel">Streaming & Encoding…</span><span id="compressPct">0%</span></div>
-        <div class="timeline-ruler" id="compressRuler"></div>
       </div>
 
       <div id="compressBanner"></div>
@@ -332,14 +298,7 @@
         </div>
 
         <div id="b44Banner"></div>
-
-        <div id="b44Result" style="display:none;">
-          <div class="video-meta" id="b44Meta"></div>
-        </div>
       </div>
-
-      <label class="field-label">Hosted video link (optional)</label>
-      <input type="text" id="videoLinkInput" placeholder="https://your-base44-app.base44.app/files/abc123.webm">
     </div>
   </section>
 
@@ -404,10 +363,7 @@
       </label>
 
       <div id="progressWrap" style="display:none;">
-        <div class="progress-label"><span id="progressLabel">Rendering…</span><span id="progressPct">0%</span></div>
-        <div class="timeline-ruler" id="ruler"></div>
-        <div class="clip-timeline" id="clipTimeline"><div class="playhead" id="playhead"></div></div>
-        <div class="progress-label" style="margin-top:4px;"><span>0:00</span><span id="timelineTotal">0:00</span></div>
+        <div class="progress-label"><span id="progressLabel">Rendering clip with audio...</span><span id="progressPct">0%</span></div>
         <div class="live-preview-wrap">
           <canvas id="livePreviewCanvas"></canvas>
         </div>
@@ -451,14 +407,11 @@
     duration: 0,
     selectedModel: 'chatgpt',
     parsedClips: null,
-    videoLink: '',
-    compressedBlob: null,
-    playAudio: false
+    compressedBlob: null
   };
 
   function el(id){ return document.getElementById(id); }
   function banner(container, type, msg){ container.innerHTML = '<div class="banner ' + type + '">' + msg + '</div>'; }
-  function clearBanner(container){ container.innerHTML = ''; }
   function formatBytes(bytes){
     if (!bytes) return '0 B';
     var units = ['B','KB','MB','GB'];
@@ -491,10 +444,11 @@
         '<span><b>Native Res</b> ' + state.videoEl.videoWidth + '×' + state.videoEl.videoHeight + '</span>';
       el('compressBtn').disabled = false;
       el('compressPreset').disabled = false;
+      if (state.parsedClips) el('renderBtn').disabled = false;
     };
   }
 
-  // --- Native Stream Compressor (Handles multi-GB without WASM memory limits) ---
+  // --- Native Stream Compressor ---
   function compressNative(sourceVideo, targetHeight, bitrate, onProgress){
     return new Promise(function(resolve, reject){
       var canvas = document.createElement('canvas');
@@ -503,9 +457,8 @@
       canvas.width = Math.round(sourceVideo.videoWidth * scale);
       canvas.height = targetHeight;
 
-      var stream = canvas.captureStream(24); // Cap framerate to 24fps for enhanced compression
+      var stream = canvas.captureStream(24);
 
-      // Attach audio stream directly from video source element
       if (sourceVideo.captureStream || sourceVideo.mozCaptureStream) {
         var audioStream = (sourceVideo.captureStream || sourceVideo.mozCaptureStream).call(sourceVideo);
         audioStream.getAudioTracks().forEach(function(track){ stream.addTrack(track); });
@@ -610,13 +563,13 @@
       var jsonStr = match ? match[1] : raw;
       state.parsedClips = JSON.parse(jsonStr.trim());
       banner(el('parseBanner'), 'ok', 'Successfully parsed ' + state.parsedClips.length + ' clip(s).');
-      el('renderBtn').disabled = !state.file;
+      if (state.file) el('renderBtn').disabled = false;
     } catch(e) {
       banner(el('parseBanner'), 'err', 'Invalid JSON response: ' + e.message);
     }
   });
 
-  // --- Render Clip Shorts ---
+  // --- Render Clip Shorts (AUDIO FIX INCLUDED) ---
   el('renderBtn').addEventListener('click', function(){
     el('progressWrap').style.display = 'block';
     el('results').innerHTML = '';
@@ -626,26 +579,47 @@
     var ctx = canvas.getContext('2d');
     canvas.width = 360; canvas.height = 640;
 
+    // Toggle speaker audio playback during render
+    var playAudible = el('audioToggle').checked;
+    state.videoEl.muted = !playAudible;
+
     var index = 0;
     function renderNext(){
       if (index >= clips.length){
         el('progressWrap').style.display = 'none';
+        state.videoEl.muted = false; // Restore default sound
         return;
       }
+
       var clip = clips[index];
-      var startSec = clip.start.split(':').reduce((acc, time) => (60 * acc) + +time, 0);
-      var endSec = clip.end.split(':').reduce((acc, time) => (60 * acc) + +time, 0);
-      
+      var startSec = clip.start.split(':').reduce((acc, t) => (60 * acc) + +t, 0);
+      var endSec = clip.end.split(':').reduce((acc, t) => (60 * acc) + +t, 0);
+
       var stream = canvas.captureStream(30);
-      var recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+      // ATTACH SOURCE AUDIO TRACK TO CANVAS MEDIASTREAM
+      if (state.videoEl.captureStream || state.videoEl.mozCaptureStream) {
+        var sourceStream = (state.videoEl.captureStream || state.videoEl.mozCaptureStream).call(state.videoEl);
+        sourceStream.getAudioTracks().forEach(function(track){
+          stream.addTrack(track);
+        });
+      }
+
+      var mime = 'video/webm;codecs=vp9,opus';
+      if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
+
+      var recorder = new MediaRecorder(stream, { mimeType: mime });
       var chunks = [];
-      recorder.ondataavailable = e => chunks.push(e.data);
+      recorder.ondataavailable = function(e){ if (e.data.size > 0) chunks.push(e.data); };
       recorder.onstop = function(){
         var blob = new Blob(chunks, { type: 'video/webm' });
         var url = URL.createObjectURL(blob);
         var card = document.createElement('div');
         card.className = 'short-card';
-        card.innerHTML = '<video src="' + url + '" controls></video><div class="meta"><b>' + clip.title + '</b></div>';
+        card.innerHTML = 
+          '<video src="' + url + '" controls></video>' +
+          '<div class="meta"><b>' + (clip.title || 'Short #' + (index+1)) + '</b></div>' +
+          '<a class="btn-primary dl" href="' + url + '" download="short_' + (index+1) + '.webm">Download Short</a>';
         el('results').appendChild(card);
         index++;
         renderNext();
