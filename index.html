@@ -722,6 +722,8 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
   // Shared by the short-cutting/render step below, which still uses canvas + MediaRecorder.
   function pickMimeType(){
     var candidates = [
+      'video/mp4;codecs="avc1.42E01E,mp4a.40.2"',
+      'video/mp4;codecs=avc1,mp4a.40.2',
       'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
       'video/webm'
@@ -730,6 +732,10 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       if (window.MediaRecorder && MediaRecorder.isTypeSupported(candidates[i])) return candidates[i];
     }
     return null;
+  }
+
+  function recordingExtension(mime){
+    return mime && mime.indexOf('video/mp4') === 0 ? 'mp4' : 'webm';
   }
 
   function compressVideo(sourceVideo, targetHeight, bitrate, onProgress){
@@ -748,8 +754,12 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       if (sourceStream){
         sourceStream.call(sourceVideo).getAudioTracks().forEach(function(track){ stream.addTrack(track); });
       }
-      var mime = 'video/webm;codecs=vp9,opus';
-      if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
+      var mime = pickMimeType();
+      if (!mime){
+        stream.getTracks().forEach(function(track){ track.stop(); });
+        reject(new Error('This browser does not support local video compression. Try a recent Chrome, Edge, or Firefox.'));
+        return;
+      }
       var recorder;
       try { recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate }); }
       catch (err){ reject(err); return; }
@@ -757,7 +767,12 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       var settled = false;
       function cleanup(){ stream.getTracks().forEach(function(track){ track.stop(); }); sourceVideo.muted = false; }
       recorder.ondataavailable = function(e){ if (e.data.size) chunks.push(e.data); };
-      recorder.onstop = function(){ if (settled) return; settled = true; cleanup(); resolve(new Blob(chunks, { type: 'video/webm' })); };
+      recorder.onstop = function(){
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(new Blob(chunks, { type: recorder.mimeType || mime }));
+      };
       recorder.onerror = function(e){ if (settled) return; settled = true; cleanup(); reject(e.error || new Error('Stream compression failed.')); };
       sourceVideo.currentTime = 0;
       sourceVideo.muted = true;
@@ -830,9 +845,10 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
         '<span><b>Reduction</b> ' + (reduction > 0 ? reduction + '%' : '—') + '</span>';
       var dl = el('compressedDownload');
       dl.href = url;
-      dl.download = (state.file.name || 'video').replace(/\.[^.]+$/, '') + '_compressed.webm';
+      var extension = recordingExtension(blob.type);
+      dl.download = (state.file.name || 'video').replace(/\.[^.]+$/, '') + '_compressed.' + extension;
       el('compressResult').style.display = 'block';
-      banner(cBanner, 'ok', 'Compressed locally to WebM.');
+      banner(cBanner, 'ok', 'Compressed locally to ' + extension.toUpperCase() + '.');
       el('b44UploadBtn').disabled = false;
     }).catch(function(err){
       el('compressProgressWrap').style.display = 'none';
@@ -1265,7 +1281,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
       }
 
       recorder.onstop = function(){
-        var blob = new Blob(chunks, { type: 'video/webm' });
+        var blob = new Blob(chunks, { type: recorder.mimeType || mime });
         stream.getTracks().forEach(function(track){ track.stop(); });
         if (audioContext) audioContext.close();
         resolve(blob);
@@ -1457,7 +1473,7 @@ ctx.durationLine + ' ' + ctx.attachmentLine + '\n\n' +
         '<div class="title">' + clip.title + '</div>' +
         '<div class="time">' + formatDuration(clip.start) + ' – ' + formatDuration(clip.end) + ' · ' + clip.aspectRatio + '</div>' +
       '</div>' +
-      '<a class="btn-primary dl" download="' + clip.title.replace(/[^a-z0-9]+/gi,'_') + '.webm" href="' + url + '">Download</a>';
+      '<a class="btn-primary dl" download="' + clip.title.replace(/[^a-z0-9]+/gi,'_') + '.' + recordingExtension(blob.type) + '" href="' + url + '">Download</a>';
     el('results').appendChild(card);
   }
 
