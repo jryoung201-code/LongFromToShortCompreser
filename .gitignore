@@ -4,4 +4,5 @@ __pycache__/
 *.pyc
 build/
 dist/
+desktop_app/release/
 *.spec
